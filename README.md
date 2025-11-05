@@ -1,14 +1,22 @@
 # Library REST API
 
-API REST per gestire una libreria con libri e autori.
+API REST completa con interfaccia web grafica per gestire una libreria con libri e autori.
 
-## Installazione
+## ✨ Caratteristiche
+
+- **API REST** completa con operazioni CRUD per autori e libri
+- **Interfaccia Web** moderna e responsive
+- **Relazioni** tra autori e libri con validazione
+- **Database in-memory** (facilmente sostituibile con DB persistente)
+- **Design moderno** con gradiente e animazioni
+
+## 🚀 Installazione
 
 ```bash
 npm install
 ```
 
-## Avvio
+## 📱 Avvio
 
 ```bash
 # Modalità produzione
@@ -18,7 +26,17 @@ npm start
 npm run dev
 ```
 
-L'API sarà disponibile su `http://localhost:3000`
+L'applicazione sarà disponibile su `http://localhost:3000`
+
+## 🌐 Interfaccia Web
+
+Apri il browser e vai su **`http://localhost:3000`** per accedere all'interfaccia grafica dove puoi:
+
+- ✅ Gestire autori (crea, modifica, elimina)
+- ✅ Gestire libri (crea, modifica, elimina)
+- ✅ Filtrare libri per autore
+- ✅ Visualizzare tutte le informazioni in card moderne
+- ✅ Ricevere notifiche per ogni operazione
 
 ## Endpoints
 
