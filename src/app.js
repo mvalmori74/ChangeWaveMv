@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const path = require('path');
 const authorsRoutes = require('./routes/authorsRoutes');
 const booksRoutes = require('./routes/booksRoutes');
 
@@ -10,6 +11,9 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Serve static files (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -17,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
   res.json({
     message: 'Benvenuto nell\'API della Libreria',
     version: '1.0.0',
