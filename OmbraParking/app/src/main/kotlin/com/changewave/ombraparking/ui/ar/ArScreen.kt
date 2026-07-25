@@ -1,0 +1,362 @@
+package com.changewave.ombraparking.ui.ar
+
+import android.hardware.GeomagneticField
+import android.os.SystemClock
+import android.view.Surface
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface as MaterialSurface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.changewave.ombraparking.core.ar.CameraProjector
+import com.changewave.ombraparking.core.geo.Vec2
+import com.changewave.ombraparking.core.shadow.ShadeInfo
+import com.changewave.ombraparking.core.shadow.ShadowEngine
+import com.changewave.ombraparking.core.sun.SolarPosition
+import com.changewave.ombraparking.core.sun.SunPosition
+import com.changewave.ombraparking.data.DeviceOrientation
+import com.changewave.ombraparking.data.OrientationTracker
+import com.changewave.ombraparking.ui.ShadowUiState
+import com.changewave.ombraparking.ui.color
+import com.changewave.ombraparking.ui.components.QuickTimeChips
+import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
+import com.changewave.ombraparking.ui.emoji
+import com.changewave.ombraparking.ui.label
+import java.time.LocalDate
+import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+
+/** Altezza tipica a cui si tiene il telefono guardando avanti. */
+private const val EYE_HEIGHT_M = 1.5
+
+/** Ogni quanto ricalcolare il verdetto sul punto inquadrato. */
+private const val RETICLE_INTERVAL_MS = 250L
+
+/**
+ * Vista in realtà aumentata: la fotocamera inquadra la strada e l'app ci appoggia sopra
+ * le ombre che ci saranno all'ora scelta, il sole e la sua traiettoria.
+ */
+@Composable
+fun ArScreen(
+    state: ShadowUiState,
+    onMinuteSelected: (Int) -> Unit,
+    onDateSelected: (LocalDate) -> Unit,
+    onNow: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val view = LocalView.current
+    val context = LocalContext.current
+    val textMeasurer = rememberTextMeasurer()
+    val orientationTracker = remember { OrientationTracker(context) }
+
+    var orientation by remember { mutableStateOf<DeviceOrientation?>(null) }
+    var sensorFov by remember { mutableStateOf<FieldOfView?>(null) }
+    var sourceAspect by remember { mutableStateOf(0.0) }
+    var bufferRotation by remember { mutableStateOf(90) }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var reticleShade by remember { mutableStateOf<ShadeInfo?>(null) }
+    var reticleDistance by remember { mutableStateOf<Double?>(null) }
+
+    val currentState by rememberUpdatedState(state)
+
+    // Il sensore punta al nord magnetico, il sole si calcola sul nord geografico.
+    val declination = remember(state.userLocation) {
+        state.userLocation?.let { position ->
+            GeomagneticField(
+                position.latitude.toFloat(),
+                position.longitude.toFloat(),
+                0f,
+                System.currentTimeMillis(),
+            ).declination
+        } ?: 0f
+    }
+    val currentDeclination by rememberUpdatedState(declination)
+
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+
+    LaunchedEffect(orientationTracker) {
+        var lastReticleUpdate = 0L
+        orientationTracker
+            .orientation(
+                displayRotation = { view.display?.rotation ?: Surface.ROTATION_0 },
+                declinationDegrees = { currentDeclination },
+            )
+            .collect { update ->
+                orientation = update
+
+                val now = SystemClock.uptimeMillis()
+                if (now - lastReticleUpdate < RETICLE_INTERVAL_MS) return@collect
+                lastReticleUpdate = now
+
+                val snapshot = currentState
+                val projector = buildProjector(update, sensorFov, sourceAspect, bufferRotation, viewportSize)
+                val plane = snapshot.plane
+                val user = snapshot.userLocation
+                val sun = snapshot.sun
+                if (projector == null || plane == null || user == null || sun == null) return@collect
+
+                val ground = projector.groundIntersection(EYE_HEIGHT_M, maxDistanceMeters = 80.0)
+                if (ground == null) {
+                    reticleShade = null
+                    reticleDistance = null
+                    return@collect
+                }
+
+                val aimed = plane.toLocal(user) + ground
+                reticleShade = withContext(Dispatchers.Default) {
+                    ShadowEngine.shadeAt(aimed, snapshot.obstacles, sun)
+                }
+                reticleDistance = ground.length
+            }
+    }
+
+    val userLocal: Vec2? = remember(state.plane, state.userLocation) {
+        val plane = state.plane ?: return@remember null
+        val user = state.userLocation ?: return@remember null
+        plane.toLocal(user)
+    }
+
+    val shapes = remember(state.shadowShapes, userLocal) {
+        if (userLocal == null) emptyList() else toUserCentredShapes(state.shadowShapes, userLocal, EYE_HEIGHT_M)
+    }
+
+    val sunPath = remember(state.date, state.zone, state.userLocation) {
+        val position = state.userLocation ?: return@remember emptyList<SunPosition>()
+        val dayStart = state.date.atStartOfDay(state.zone).toInstant()
+        (0 until 96).map { quarter ->
+            SolarPosition.at(dayStart.plusSeconds(quarter * 15L * 60L), position)
+        }
+    }
+
+    Box(modifier.fillMaxSize()) {
+        CameraPreview(
+            modifier = Modifier.fillMaxSize(),
+            onOptics = { fov, aspect, rotation ->
+                sensorFov = fov
+                sourceAspect = aspect
+                bufferRotation = rotation
+            },
+        )
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { viewportSize = it }
+        ) {
+            val projector = buildProjector(orientation, sensorFov, sourceAspect, bufferRotation, viewportSize)
+                ?: return@Canvas
+
+            drawShadows(projector, shapes)
+            drawHorizon(projector, textMeasurer)
+            state.sun?.let { sun -> drawSun(projector, sun, sunPath) }
+            drawReticle(reticleShade?.quality?.color ?: Color.White)
+        }
+
+        ReticleLabel(
+            shade = reticleShade,
+            distanceMeters = reticleDistance,
+            compassAccuracy = orientation?.magneticAccuracy,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+        )
+
+        MaterialSurface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(12.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShadeTimelineStrip(
+                    forecast = state.forecast,
+                    dayStart = state.date.atStartOfDay(state.zone).toInstant(),
+                    selectedMinute = state.minuteOfDay,
+                    onMinuteSelected = onMinuteSelected,
+                )
+                QuickTimeChips(
+                    date = state.date,
+                    zone = state.zone,
+                    selectedMinute = state.minuteOfDay,
+                    onDateSelected = onDateSelected,
+                    onMinuteSelected = onMinuteSelected,
+                    onNow = onNow,
+                )
+            }
+        }
+    }
+}
+
+/** Etichetta sopra il mirino: cosa c'è nel punto inquadrato all'ora scelta. */
+@Composable
+private fun ReticleLabel(
+    shade: ShadeInfo?,
+    distanceMeters: Double?,
+    compassAccuracy: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val text = when {
+        shade == null && distanceMeters == null -> "Inquadra la strada davanti a te"
+        shade == null -> "Calcolo…"
+        else -> buildString {
+            append(shade.quality.emoji)
+            append(' ')
+            append(shade.quality.label)
+            distanceMeters?.let { append(" · a ${it.toInt()} m") }
+            shade.obstacle?.name?.let { append(" · $it") }
+        }
+    }
+
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        MaterialSurface(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            shape = MaterialTheme.shapes.small,
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.titleSmall,
+            )
+        }
+        if (compassAccuracy != null && compassAccuracy < 2) {
+            MaterialSurface(
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                Text(
+                    text = "Bussola da calibrare: muovi il telefono a forma di otto",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraPreview(
+    modifier: Modifier = Modifier,
+    onOptics: (FieldOfView?, Double, Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val previewView = remember {
+        PreviewView(context).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val currentOnOptics by rememberUpdatedState(onOptics)
+
+    AndroidView(factory = { previewView }, modifier = modifier)
+
+    LaunchedEffect(previewView) {
+        val cameraProvider = context.awaitCameraProvider()
+        provider = cameraProvider
+
+        val preview = Preview.Builder().build()
+        preview.setSurfaceProvider(previewView.surfaceProvider)
+        cameraProvider.unbindAll()
+        val camera = cameraProvider.bindToLifecycle(
+            lifecycleOwner,
+            CameraSelector.DEFAULT_BACK_CAMERA,
+            preview,
+        )
+
+        val resolutionInfo = preview.resolutionInfo
+        currentOnOptics(
+            CameraOptics.sensorFieldOfView(camera.cameraInfo),
+            CameraOptics.sourceAspectRatio(resolutionInfo),
+            resolutionInfo?.rotationDegrees ?: 90,
+        )
+    }
+
+    DisposableEffect(provider) {
+        onDispose { provider?.unbindAll() }
+    }
+}
+
+/**
+ * Costruisce il proiettore con il campo visivo effettivo dell'anteprima.
+ * Restituisce null finché non si conoscono orientamento e dimensioni della vista.
+ */
+private fun buildProjector(
+    orientation: DeviceOrientation?,
+    sensorFov: FieldOfView?,
+    sourceAspect: Double,
+    bufferRotation: Int,
+    viewportSize: IntSize,
+): CameraProjector? {
+    if (orientation == null || viewportSize.width == 0 || viewportSize.height == 0) return null
+
+    val viewAspect = viewportSize.width.toDouble() / viewportSize.height.toDouble()
+    val fov = CameraOptics.visibleFieldOfView(
+        sensorFov = sensorFov ?: FieldOfView.FALLBACK,
+        bufferRotationDegrees = if (sensorFov == null) 0 else bufferRotation,
+        sourceAspectRatio = sourceAspect,
+        viewAspectRatio = viewAspect,
+    )
+
+    return CameraProjector(
+        viewportWidthPx = viewportSize.width.toFloat(),
+        viewportHeightPx = viewportSize.height.toFloat(),
+        horizontalFovDegrees = fov.horizontalDegrees,
+        verticalFovDegrees = fov.verticalDegrees,
+        deviceToWorld = orientation.deviceToWorld,
+    )
+}
+
+private suspend fun android.content.Context.awaitCameraProvider(): ProcessCameraProvider =
+    suspendCancellableCoroutine { continuation ->
+        val future = ProcessCameraProvider.getInstance(this)
+        future.addListener(
+            {
+                try {
+                    continuation.resume(future.get())
+                } catch (error: Exception) {
+                    // Fotocamera non disponibile: la vista AR resta senza anteprima
+                    // invece di far cadere l'app.
+                    continuation.cancel(error)
+                }
+            },
+            ContextCompat.getMainExecutor(this),
+        )
+    }

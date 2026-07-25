@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ombra Parking</string>
+
+    <string name="tab_map">Mappa</string>
+    <string name="tab_ar">Realtà aumentata</string>
+
+    <string name="permission_location_title">Serve la posizione</string>
+    <string name="permission_location_body">L\'app calcola le ombre degli edifici intorno a te: senza posizione non sa quali edifici guardare.</string>
+    <string name="permission_camera_title">Serve la fotocamera</string>
+    <string name="permission_camera_body">La vista in realtà aumentata sovrappone le ombre a quello che inquadri.</string>
+    <string name="permission_grant">Concedi il permesso</string>
+    <string name="permission_settings">Apri le impostazioni</string>
+
+    <string name="loading_obstacles">Sto scaricando edifici e alberi…</string>
+    <string name="retry">Riprova</string>
+</resources>

@@ -1,3 +1,7 @@
+> **Nota:** questo repository contiene più progetti. L'app Android **Ombra Parking**
+> (geolocalizzazione + realtà aumentata per trovare parcheggio all'ombra) sta in
+> [`OmbraParking/`](OmbraParking/README.md).
+
 # Library REST API
 
 API REST completa con interfaccia web grafica per gestire una libreria con libri e autori.
