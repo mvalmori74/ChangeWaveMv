@@ -21,6 +21,7 @@ import com.changewave.ombraparking.data.LocationTracker
 import com.changewave.ombraparking.data.ObstacleRepository
 import com.changewave.ombraparking.data.ParkedCar
 import com.changewave.ombraparking.data.ParkedCarStore
+import com.changewave.ombraparking.data.SunAlarmScheduler
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -97,6 +98,8 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         (application as OmbraParkingApplication).obstacleRepository
     private val parkedCarStore: ParkedCarStore =
         (application as OmbraParkingApplication).parkedCarStore
+    private val sunAlarmScheduler: SunAlarmScheduler =
+        (application as OmbraParkingApplication).sunAlarmScheduler
     private val locationTracker = LocationTracker(application)
 
     private val _state = MutableStateFlow(ShadowUiState())
@@ -278,7 +281,26 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
                 forecast = result.forecast,
                 parkedCarStatus = result.parkedCarStatus,
             )
+            updateSunAlarm(snapshot.parkedCar, result.parkedCarStatus)
         }
+    }
+
+    /**
+     * Tiene allineato l'avviso a quello che sappiamo adesso.
+     *
+     * Se l'auto è fuori dalla zona analizzata non tocchiamo l'avviso già fissato: era stato
+     * calcolato quando i dati c'erano e resta valido, perché l'auto non si è mossa.
+     */
+    private fun updateSunAlarm(car: ParkedCar?, status: ParkedCarStatus?) {
+        val current = _state.value.parkedCar
+        if (current == null) {
+            sunAlarmScheduler.cancel()
+            return
+        }
+        // L'auto è cambiata mentre calcolavamo: il ricalcolo appena partito sistemerà l'avviso.
+        if (current != car) return
+        if (status == null) return
+        sunAlarmScheduler.schedule(current, status.sunArrivesAt)
     }
 
     /**

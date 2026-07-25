@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.changewave.ombraparking.data.ObstacleRepository
 import com.changewave.ombraparking.data.ParkedCarStore
+import com.changewave.ombraparking.data.SunAlarmScheduler
 import java.io.File
 import org.osmdroid.config.Configuration
 
@@ -18,6 +19,9 @@ class OmbraParkingApplication : Application() {
 
     /** Posto auto salvato, condiviso dalle due viste. */
     val parkedCarStore: ParkedCarStore by lazy { ParkedCarStore(this) }
+
+    /** Programmazione dell'avviso di sole in arrivo sull'auto. */
+    val sunAlarmScheduler: SunAlarmScheduler by lazy { SunAlarmScheduler(this) }
 
     override fun onCreate() {
         super.onCreate()

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.changewave.ombraparking.core.alarm.SunWarning
 import com.changewave.ombraparking.core.geo.LatLng
 import com.changewave.ombraparking.core.shadow.ShadeQuality
 import com.changewave.ombraparking.data.ParkedCar
@@ -114,7 +115,8 @@ private fun statusText(status: ParkedCarStatus?, zone: ZoneId): String {
             } else {
                 val minutes = Duration.between(status.computedAt, arrival).toMinutes().toInt()
                 prefix + "All'ombra, il sole arriva alle ${arrival.asClockTime(zone)} " +
-                    "(fra ${formatDuration(minutes)})"
+                    "(fra ${formatDuration(minutes)}) · ti avviso " +
+                    "${SunWarning.DEFAULT_LEAD_MINUTES} min prima"
             }
         }
 

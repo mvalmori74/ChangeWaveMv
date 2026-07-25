@@ -73,6 +73,9 @@ fun OmbraParkingApp(viewModel: ShadowViewModel = viewModel()) {
         }
     }
 
+    // Il permesso delle notifiche si chiede solo quando c'è un'auto da tenere d'occhio.
+    NotificationPermissionEffect(enabled = state.parkedCar != null)
+
     // La posizione serve solo mentre l'app è in primo piano.
     DisposableEffect(lifecycleOwner, hasLocationPermission) {
         val observer = LifecycleEventObserver { _, event ->

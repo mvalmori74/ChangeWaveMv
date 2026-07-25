@@ -33,6 +33,22 @@ esplora gli scenari, ma l'auto resta parcheggiata nel mondo reale. Se ti allonta
 zona di cui sono stati scaricati gli edifici, l'app dice che non può sapere se è al sole
 invece di tirare a indovinare.
 
+### La notifica
+
+Quando l'auto è all'ombra e il sole arriverà più tardi, l'app fissa un avviso per **un
+quarto d'ora prima** e te lo ricorda nella riga in basso. La notifica arriva anche ad app
+chiusa: il calcolo è già stato fatto al momento del parcheggio, quindi il lavoro
+programmato non ha bisogno né di rete né di GPS e prima di suonare controlla che l'auto sia
+ancora dov'era — se l'hai spostata o hai cancellato il punto, tace.
+
+Il permesso delle notifiche viene chiesto quando salvi il primo parcheggio, non all'avvio:
+prima non ci sarebbe niente da notificare. Se lo neghi, il resto dell'app funziona uguale.
+
+Due limiti dichiarati: l'avviso usa WorkManager e non una sveglia esatta (che Android
+concede col contagocce), quindi in *Doze* può arrivare qualche minuto tardi — il preavviso
+di quindici minuti serve anche ad assorbire quello scarto. E l'avviso vale per l'arrivo di
+sole della giornata in corso: per i giorni successivi va riaperta l'app.
+
 ## Le due viste
 
 **Mappa** (OpenStreetMap via osmdroid): vista dall'alto con le ombre dell'ora scelta. Tocca un
@@ -62,9 +78,10 @@ OmbraParking/
 │   ├── shadow/ShadowEngine.kt   # ombra di un punto + sagome da disegnare
 │   ├── shadow/ShadeTimeline.kt  # previsione oraria su un punto
 │   ├── ar/CameraProjector.kt    # proiezione prospettica con clipping
+│   ├── alarm/SunWarning.kt      # quando far scattare l'avviso di sole in arrivo
 │   └── osm/                     # query Overpass, parsing, stima delle altezze
-└── app/                         # Android: Compose, CameraX, osmdroid, sensori
-    ├── data/                    # posizione, orientamento, Overpass, posto auto salvato
+└── app/                         # Android: Compose, CameraX, osmdroid, sensori, WorkManager
+    ├── data/                    # posizione, orientamento, Overpass, posto auto, notifica
     └── ui/map, ui/ar, ui/components
 ```
 
@@ -76,7 +93,7 @@ emulatore, ed è dove vive la logica che conta.
 Serve Android Studio (Ladybug o più recente) oppure JDK 17+ e l'Android SDK con API 35.
 
 ```bash
-./gradlew :core:test        # test della logica (52 test, nessun emulatore)
+./gradlew :core:test        # test della logica (59 test, nessun emulatore)
 ./gradlew :app:assembleDebug
 ```
 
@@ -106,10 +123,11 @@ significa che mappa e AR starebbero raccontando cose diverse.
   l'app lo dice e conviene calibrarla muovendolo a forma di otto.
 - Overpass è un servizio pubblico gratuito: l'app fa una richiesta per zona e la tiene in
   cache, ma con la rete lenta il primo caricamento può richiedere qualche secondo.
+- L'avviso di sole in arrivo passa da WorkManager: in *Doze* può scattare qualche minuto
+  dopo l'orario previsto, e copre la giornata in corso (per quelle dopo, riapri l'app).
 
 ## Possibili sviluppi
 
-- Notifica quando manca poco all'arrivo del sole sull'auto (serve un worker in background).
 - Ombra proiettata sui parcheggi mappati in OSM, con classifica dei posti più freschi.
 - Modello del terreno (DTM) per le strade in pendenza.
 - Cache su disco degli ostacoli per l'uso offline.
