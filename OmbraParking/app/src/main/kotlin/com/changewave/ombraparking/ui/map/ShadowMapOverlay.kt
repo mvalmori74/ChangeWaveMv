@@ -22,6 +22,7 @@ class ShadowMapOverlay : Overlay() {
     var buildingFootprints: List<List<GeoPoint>> = emptyList()
     var target: GeoPoint? = null
     var userPosition: GeoPoint? = null
+    var parkedCar: GeoPoint? = null
 
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -50,6 +51,16 @@ class ShadowMapOverlay : Overlay() {
         strokeWidth = 3f
         color = Color.WHITE
     }
+    private val parkedFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(255, 46, 125, 78)
+    }
+    private val parkedLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 24f
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
 
     private val reusablePoint = Point()
 
@@ -74,6 +85,16 @@ class ShadowMapOverlay : Overlay() {
             canvas.drawLine(x + 16f, y, x + 22f, y, targetPaint)
             canvas.drawLine(x, y - 22f, x, y - 16f, targetPaint)
             canvas.drawLine(x, y + 16f, x, y + 22f, targetPaint)
+        }
+
+        parkedCar?.let { point ->
+            projection.toPixels(point, reusablePoint)
+            val x = reusablePoint.x.toFloat()
+            val y = reusablePoint.y.toFloat()
+            canvas.drawCircle(x, y, 20f, parkedFillPaint)
+            canvas.drawCircle(x, y, 20f, userStrokePaint)
+            // Il testo si centra sulla linea di base: 8 px sotto il centro lo allinea al cerchio.
+            canvas.drawText("P", x, y + 8f, parkedLabelPaint)
         }
 
         userPosition?.let { point ->

@@ -170,4 +170,51 @@ class ShadowEngineTest {
         assertNotNull(forecast.shadeEndsAfter(afternoon))
         assertTrue(forecast.slots.zipWithNext().all { (a, b) -> a.end == b.start }, "gli intervalli devono essere contigui")
     }
+
+    @Test
+    fun `la previsione dice quando il sole tornerà a colpire un punto in ombra`() {
+        val rome = LatLng(41.9028, 12.4964)
+        val zone = ZoneId.of("Europe/Rome")
+        val day = LocalDate.of(2024, 7, 15)
+        // Punto a ovest dell'edificio: in ombra al mattino, al sole nel pomeriggio.
+        val point = Vec2(-12.0, 0.0)
+
+        val forecast = ShadeTimeline.compute(
+            point = point,
+            obstacles = listOf(building),
+            location = rome,
+            from = day.atStartOfDay(zone).toInstant(),
+            to = day.plusDays(1).atStartOfDay(zone).toInstant(),
+            stepMinutes = 5,
+        )
+
+        val morning = day.atTime(8, 0).atZone(zone).toInstant()
+        assertEquals(ShadeQuality.SHADE, forecast.qualityAt(morning))
+
+        val sunArrival = assertNotNull(forecast.nextSunStart(morning), "il sole deve arrivare in giornata")
+        assertTrue(sunArrival.isAfter(morning))
+        assertEquals(ShadeQuality.SUN, forecast.qualityAt(sunArrival))
+        // Al momento appena precedente il punto è ancora in ombra.
+        assertEquals(ShadeQuality.SHADE, forecast.qualityAt(sunArrival.minusSeconds(60)))
+    }
+
+    @Test
+    fun `senza sole in arrivo la previsione non inventa un orario`() {
+        val night = LocalDate.of(2024, 12, 21)
+        val zone = ZoneId.of("Europe/Rome")
+        val rome = LatLng(41.9028, 12.4964)
+        // Un metro a nord del muro: con il sole basso di dicembre non lo raggiunge mai.
+        val point = Vec2(0.0, 6.0)
+
+        val forecast = ShadeTimeline.compute(
+            point = point,
+            obstacles = listOf(building),
+            location = rome,
+            from = night.atStartOfDay(zone).toInstant(),
+            to = night.plusDays(1).atStartOfDay(zone).toInstant(),
+            stepMinutes = 10,
+        )
+
+        assertNull(forecast.nextSunStart(night.atTime(9, 0).atZone(zone).toInstant()))
+    }
 }

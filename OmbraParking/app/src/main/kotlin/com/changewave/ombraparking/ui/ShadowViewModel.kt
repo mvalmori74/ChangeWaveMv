@@ -10,6 +10,7 @@ import com.changewave.ombraparking.core.geo.Vec2
 import com.changewave.ombraparking.core.shadow.Obstacle
 import com.changewave.ombraparking.core.shadow.ShadeForecast
 import com.changewave.ombraparking.core.shadow.ShadeInfo
+import com.changewave.ombraparking.core.shadow.ShadeQuality
 import com.changewave.ombraparking.core.shadow.ShadeTimeline
 import com.changewave.ombraparking.core.shadow.ShadowEngine
 import com.changewave.ombraparking.core.sun.DayLight
@@ -18,6 +19,8 @@ import com.changewave.ombraparking.core.sun.SunPosition
 import com.changewave.ombraparking.core.sun.SunTimes
 import com.changewave.ombraparking.data.LocationTracker
 import com.changewave.ombraparking.data.ObstacleRepository
+import com.changewave.ombraparking.data.ParkedCar
+import com.changewave.ombraparking.data.ParkedCarStore
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -29,6 +32,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * Situazione dell'auto parcheggiata **adesso**, non all'ora dello slider: qui interessa la
+ * realtà, non la simulazione.
+ */
+data class ParkedCarStatus(
+    val quality: ShadeQuality,
+    val obstacleName: String?,
+    /** Quando il sole tornerà a colpire l'auto, se ora è in ombra. */
+    val sunArrivesAt: Instant?,
+    /** Quando l'auto tornerà in ombra, se ora è al sole. */
+    val shadeArrivesAt: Instant?,
+    val computedAt: Instant,
+)
 
 /**
  * Stato unico condiviso da mappa e realtà aumentata: le due viste mostrano gli stessi
@@ -52,6 +69,10 @@ data class ShadowUiState(
     val dayLight: DayLight? = null,
     val shade: ShadeInfo? = null,
     val forecast: ShadeForecast? = null,
+    /** Posto auto salvato, se c'è. */
+    val parkedCar: ParkedCar? = null,
+    /** Null se l'auto è troppo lontana dagli edifici scaricati per dire qualcosa di sensato. */
+    val parkedCarStatus: ParkedCarStatus? = null,
     val isLoadingObstacles: Boolean = false,
     val errorMessage: String? = null,
 ) {
@@ -74,6 +95,8 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository: ObstacleRepository =
         (application as OmbraParkingApplication).obstacleRepository
+    private val parkedCarStore: ParkedCarStore =
+        (application as OmbraParkingApplication).parkedCarStore
     private val locationTracker = LocationTracker(application)
 
     private val _state = MutableStateFlow(ShadowUiState())
@@ -85,6 +108,38 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Centro dell'ultima richiesta: serve a capire quando l'utente si è spostato davvero. */
     private var lastLoadedCenter: LatLng? = null
+
+    init {
+        viewModelScope.launch {
+            parkedCarStore.parkedCar.collect { car ->
+                _state.value = _state.value.copy(parkedCar = car, parkedCarStatus = null)
+                recompute()
+            }
+        }
+    }
+
+    /**
+     * Salva il posto auto sul punto attualmente puntato: quello scelto sulla mappa se
+     * l'utente ne ha indicato uno, altrimenti la sua posizione.
+     */
+    fun parkHere() {
+        val snapshot = _state.value
+        val position = if (snapshot.targetFollowsUser) {
+            snapshot.userLocation ?: snapshot.target
+        } else {
+            snapshot.target
+        }
+        if (position == null) {
+            _state.value = snapshot.copy(errorMessage = "Aspetto la posizione per salvare il posto auto")
+            return
+        }
+        _state.value = snapshot.copy(errorMessage = null)
+        parkedCarStore.save(position)
+    }
+
+    fun clearParkedCar() {
+        parkedCarStore.clear()
+    }
 
     fun startLocationUpdates() {
         if (locationJob?.isActive == true || !locationTracker.hasPermission()) return
@@ -206,7 +261,13 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
                 } else {
                     snapshot.forecast
                 }
-                Computed(sun, shapes, shade, dayLight, forecast)
+                // Lo stato dell'auto guarda l'ora vera, quindi non cambia muovendo lo slider.
+                val parkedStatus = if (recomputeForecast) {
+                    parkedCarStatus(snapshot, plane)
+                } else {
+                    snapshot.parkedCarStatus
+                }
+                Computed(sun, shapes, shade, dayLight, forecast, parkedStatus)
             }
 
             _state.value = _state.value.copy(
@@ -215,8 +276,40 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
                 shade = result.shade,
                 dayLight = result.dayLight,
                 forecast = result.forecast,
+                parkedCarStatus = result.parkedCarStatus,
             )
         }
+    }
+
+    /**
+     * Ombra sull'auto adesso e prossimo cambio.
+     * Restituisce null se l'auto è fuori dalla zona di cui conosciamo gli edifici: meglio
+     * non dire niente che dire "pieno sole" solo perché lì non abbiamo dati.
+     */
+    private fun parkedCarStatus(snapshot: ShadowUiState, plane: LocalPlane): ParkedCarStatus? {
+        val car = snapshot.parkedCar ?: return null
+        val carLocal = plane.toLocal(car.position)
+        if (carLocal.length > PARKED_ANALYSIS_RADIUS_M) return null
+
+        val now = Instant.now()
+        val info = ShadowEngine.shadeAt(carLocal, snapshot.obstacles, SolarPosition.at(now, car.position))
+        val endOfDay = LocalDate.now(snapshot.zone).plusDays(1).atStartOfDay(snapshot.zone).toInstant()
+        val forecast = ShadeTimeline.compute(
+            point = carLocal,
+            obstacles = snapshot.obstacles,
+            location = car.position,
+            from = now,
+            to = endOfDay,
+            stepMinutes = FORECAST_STEP_MINUTES,
+        )
+
+        return ParkedCarStatus(
+            quality = info.quality,
+            obstacleName = info.obstacle?.name,
+            sunArrivesAt = forecast.nextSunStart(now),
+            shadeArrivesAt = forecast.nextShadeStart(now),
+            computedAt = now,
+        )
     }
 
     private class Computed(
@@ -225,11 +318,15 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         val shade: ShadeInfo?,
         val dayLight: DayLight,
         val forecast: ShadeForecast?,
+        val parkedCarStatus: ParkedCarStatus?,
     )
 
     private companion object {
         /** Oltre questo spostamento vale la pena riscaricare gli edifici intorno. */
         const val RELOAD_DISTANCE_M = 150.0
         const val FORECAST_STEP_MINUTES = 10
+
+        /** Distanza dal centro dei dati oltre la quale non si azzarda un verdetto sull'auto. */
+        const val PARKED_ANALYSIS_RADIUS_M = 250.0
     }
 }

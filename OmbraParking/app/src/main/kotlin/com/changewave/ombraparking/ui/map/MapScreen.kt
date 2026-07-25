@@ -36,6 +36,7 @@ import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.geo.Vec2
 import com.changewave.ombraparking.core.shadow.ObstacleKind
 import com.changewave.ombraparking.ui.ShadowUiState
+import com.changewave.ombraparking.ui.components.ParkedCarBar
 import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeSummaryCard
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
@@ -59,6 +60,8 @@ fun MapScreen(
     onDateSelected: (LocalDate) -> Unit,
     onNow: () -> Unit,
     onRefresh: () -> Unit,
+    onPark: () -> Unit,
+    onClearParkedCar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -123,6 +126,9 @@ fun MapScreen(
                 shadowOverlay.buildingFootprints = buildingGeometry
                 shadowOverlay.target = state.target?.let { GeoPoint(it.latitude, it.longitude) }
                 shadowOverlay.userPosition = state.userLocation?.let { GeoPoint(it.latitude, it.longitude) }
+                shadowOverlay.parkedCar = state.parkedCar?.let {
+                    GeoPoint(it.position.latitude, it.position.longitude)
+                }
 
                 val center = state.userLocation ?: state.target
                 if (!hasCentered && center != null) {
@@ -172,6 +178,21 @@ fun MapScreen(
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ParkedCarBar(
+                        parkedCar = state.parkedCar,
+                        status = state.parkedCarStatus,
+                        userLocation = state.userLocation,
+                        zone = state.zone,
+                        onPark = onPark,
+                        onClear = onClearParkedCar,
+                        onShowCar = {
+                            state.parkedCar?.let { car ->
+                                mapView.controller.animateTo(
+                                    GeoPoint(car.position.latitude, car.position.longitude)
+                                )
+                            }
+                        },
+                    )
                     ShadeTimelineStrip(
                         forecast = state.forecast,
                         dayStart = state.date.atStartOfDay(state.zone).toInstant(),

@@ -38,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.changewave.ombraparking.core.ar.CameraProjector
+import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.geo.Vec2
 import com.changewave.ombraparking.core.shadow.ShadeInfo
 import com.changewave.ombraparking.core.shadow.ShadowEngine
@@ -47,6 +48,7 @@ import com.changewave.ombraparking.data.DeviceOrientation
 import com.changewave.ombraparking.data.OrientationTracker
 import com.changewave.ombraparking.ui.ShadowUiState
 import com.changewave.ombraparking.ui.color
+import com.changewave.ombraparking.ui.components.ParkedCarBar
 import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
 import com.changewave.ombraparking.ui.emoji
@@ -73,6 +75,8 @@ fun ArScreen(
     onMinuteSelected: (Int) -> Unit,
     onDateSelected: (LocalDate) -> Unit,
     onNow: () -> Unit,
+    onPark: () -> Unit,
+    onClearParkedCar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val view = LocalView.current
@@ -154,6 +158,13 @@ fun ArScreen(
         if (userLocal == null) emptyList() else toUserCentredShapes(state.shadowShapes, userLocal, EYE_HEIGHT_M)
     }
 
+    // Posizione dell'auto rispetto a chi guarda: serve per piantarci il segnaposto.
+    val parkedCarOffset: Vec2? = remember(state.parkedCar, state.userLocation) {
+        val car = state.parkedCar ?: return@remember null
+        val user = state.userLocation ?: return@remember null
+        LocalPlane(user).toLocal(car.position)
+    }
+
     val sunPath = remember(state.date, state.zone, state.userLocation) {
         val position = state.userLocation ?: return@remember emptyList<SunPosition>()
         val dayStart = state.date.atStartOfDay(state.zone).toInstant()
@@ -183,6 +194,9 @@ fun ArScreen(
             drawShadows(projector, shapes)
             drawHorizon(projector, textMeasurer)
             state.sun?.let { sun -> drawSun(projector, sun, sunPath) }
+            parkedCarOffset?.let { offset ->
+                drawParkedCar(projector, offset, EYE_HEIGHT_M, textMeasurer)
+            }
             drawReticle(reticleShade?.quality?.color ?: Color.White)
         }
 
@@ -204,6 +218,14 @@ fun ArScreen(
             shape = MaterialTheme.shapes.medium,
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ParkedCarBar(
+                    parkedCar = state.parkedCar,
+                    status = state.parkedCarStatus,
+                    userLocation = state.userLocation,
+                    zone = state.zone,
+                    onPark = onPark,
+                    onClear = onClearParkedCar,
+                )
                 ShadeTimelineStrip(
                     forecast = state.forecast,
                     dayStart = state.date.atStartOfDay(state.zone).toInstant(),

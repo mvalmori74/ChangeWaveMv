@@ -136,6 +136,8 @@ fun OmbraParkingApp(viewModel: ShadowViewModel = viewModel()) {
                     onDateSelected = viewModel::setDate,
                     onNow = viewModel::useCurrentTime,
                     onRefresh = viewModel::refresh,
+                    onPark = viewModel::parkHere,
+                    onClearParkedCar = viewModel::clearParkedCar,
                 )
 
                 !hasCameraPermission -> PermissionRequest(
@@ -149,6 +151,8 @@ fun OmbraParkingApp(viewModel: ShadowViewModel = viewModel()) {
                     onMinuteSelected = viewModel::setTime,
                     onDateSelected = viewModel::setDate,
                     onNow = viewModel::useCurrentTime,
+                    onPark = viewModel::parkHere,
+                    onClearParkedCar = viewModel::clearParkedCar,
                 )
             }
         }

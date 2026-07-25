@@ -46,6 +46,13 @@ data class ShadeForecast(
     fun nextShadeStart(instant: Instant): Instant? =
         slots.firstOrNull { it.quality.isShaded && it.start.isAfter(instant) }?.start
 
+    /**
+     * Prossimo momento in cui il punto torna in pieno sole dopo [instant].
+     * È la domanda dell'auto parcheggiata: fra quanto la macchina prende sole?
+     */
+    fun nextSunStart(instant: Instant): Instant? =
+        slots.firstOrNull { it.quality == ShadeQuality.SUN && it.start.isAfter(instant) }?.start
+
     /** Minuti totali di ombra (piena o filtrata) nella finestra analizzata, notte esclusa. */
     val shadedMinutes: Int
         get() = slots.filter { it.quality.isShaded }

@@ -20,6 +20,19 @@ torno alle 15 e non voglio trovarla bollente?*
 5. **Previsione** — campionando la giornata ogni 10 minuti esce la fascia oraria "sole/ombra"
    che vedi nella barra colorata: *ombra fino alle 17:20, ancora 2 h 10 min*.
 
+## Il posto auto
+
+Quando parcheggi salvi il punto con un tocco: l'app lo ricorda fra un avvio e l'altro e lo
+segna con una **P** verde sulla mappa e con un segnaposto in AR, con la distanza. La riga in
+basso dice a che distanza e in che direzione è l'auto, quando l'hai lasciata e — la cosa che
+serve davvero — **quando il sole arriverà a colpirla**: *"All'ombra, il sole arriva alle 16:20
+(fra 1 h 10 min)"*.
+
+Quello stato è calcolato sull'ora vera, non su quella dello slider: muovere la barra oraria
+esplora gli scenari, ma l'auto resta parcheggiata nel mondo reale. Se ti allontani oltre la
+zona di cui sono stati scaricati gli edifici, l'app dice che non può sapere se è al sole
+invece di tirare a indovinare.
+
 ## Le due viste
 
 **Mappa** (OpenStreetMap via osmdroid): vista dall'alto con le ombre dell'ora scelta. Tocca un
@@ -51,7 +64,7 @@ OmbraParking/
 │   ├── ar/CameraProjector.kt    # proiezione prospettica con clipping
 │   └── osm/                     # query Overpass, parsing, stima delle altezze
 └── app/                         # Android: Compose, CameraX, osmdroid, sensori
-    ├── data/                    # posizione, orientamento, repository Overpass
+    ├── data/                    # posizione, orientamento, Overpass, posto auto salvato
     └── ui/map, ui/ar, ui/components
 ```
 
@@ -96,7 +109,7 @@ significa che mappa e AR starebbero raccontando cose diverse.
 
 ## Possibili sviluppi
 
-- Salvare il punto dove hai parcheggiato e avvisare quando il sole sta per arrivarci.
+- Notifica quando manca poco all'arrivo del sole sull'auto (serve un worker in background).
 - Ombra proiettata sui parcheggi mappati in OSM, con classifica dei posti più freschi.
 - Modello del terreno (DTM) per le strade in pendenza.
 - Cache su disco degli ostacoli per l'uso offline.

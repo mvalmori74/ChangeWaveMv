@@ -32,6 +32,9 @@ const val MAX_DRAW_DISTANCE_M = 150.0
 /** Distanza a cui vengono disegnati gli elementi "all'infinito" (orizzonte, sole). */
 private const val FAR_DISTANCE_M = 300.0
 
+/** Verde del segnaposto dell'auto: lo stesso usato sulla mappa. */
+private val PARKED_COLOR = Color(0xFF2E7D4E)
+
 fun DrawScope.drawShadows(projector: CameraProjector, shapes: List<List<Vec3>>) {
     if (shapes.isEmpty()) return
     val path = Path()
@@ -105,6 +108,35 @@ fun DrawScope.drawSun(projector: CameraProjector, sun: SunPosition, dayPath: Lis
     val point = projector.project(sun.skyPoint()) ?: return
     drawCircle(color = ShadeColors.sun.copy(alpha = 0.28f), radius = 46f, center = Offset(point.x, point.y))
     drawCircle(color = ShadeColors.sun, radius = 20f, center = Offset(point.x, point.y))
+}
+
+/**
+ * Segnaposto dell'auto parcheggiata, appoggiato al suolo con l'etichetta della distanza.
+ *
+ * @param offset posizione dell'auto rispetto all'utente, in metri (est, nord).
+ * @param eyeHeightMeters altezza della fotocamera da terra.
+ */
+fun DrawScope.drawParkedCar(
+    projector: CameraProjector,
+    offset: Vec2,
+    eyeHeightMeters: Double,
+    textMeasurer: TextMeasurer,
+) {
+    val ground = projector.project(Vec3(offset.x, offset.y, -eyeHeightMeters)) ?: return
+    val center = Offset(ground.x, ground.y)
+
+    drawCircle(color = PARKED_COLOR.copy(alpha = 0.35f), radius = 34f, center = center)
+    drawCircle(color = PARKED_COLOR, radius = 16f, center = center)
+    drawCircle(color = Color.White, radius = 16f, center = center, style = Stroke(width = 3f))
+
+    val layout = textMeasurer.measure(
+        text = "🚗 ${ground.distanceMeters.toInt()} m",
+        style = TextStyle(color = Color.White, fontSize = 15.sp),
+    )
+    drawText(
+        textLayoutResult = layout,
+        topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height - 28f),
+    )
 }
 
 /** Mirino centrale: il punto al suolo di cui l'app dà il verdetto. */

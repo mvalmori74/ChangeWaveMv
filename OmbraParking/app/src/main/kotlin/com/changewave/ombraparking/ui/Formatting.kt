@@ -1,12 +1,15 @@
 package com.changewave.ombraparking.ui
 
 import androidx.compose.ui.graphics.Color
+import com.changewave.ombraparking.core.geo.LatLng
+import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.shadow.ShadeQuality
 import com.changewave.ombraparking.ui.theme.ShadeColors
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.atan2
 
 private val hourFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ITALY)
 
@@ -46,6 +49,24 @@ val ShadeQuality.color: Color
         ShadeQuality.SHADE -> ShadeColors.shade
         ShadeQuality.NIGHT -> ShadeColors.night
     }
+
+/** Distanza e direzione di un punto rispetto a un altro. */
+data class RelativePosition(val distanceMeters: Double, val azimuthDegrees: Double)
+
+fun relativePosition(from: LatLng, to: LatLng): RelativePosition {
+    val offset = LocalPlane(from).toLocal(to)
+    val azimuth = Math.toDegrees(atan2(offset.x, offset.y))
+    return RelativePosition(
+        distanceMeters = offset.length,
+        azimuthDegrees = ((azimuth % 360.0) + 360.0) % 360.0,
+    )
+}
+
+/** "80 m", "1,2 km". */
+fun formatDistance(meters: Double): String = when {
+    meters < 1000 -> "${meters.toInt()} m"
+    else -> String.format(Locale.ITALY, "%.1f km", meters / 1000)
+}
 
 /** "Nord-est", "Sud"… a partire da un azimut in gradi. */
 fun cardinalName(azimuthDegrees: Double): String {
