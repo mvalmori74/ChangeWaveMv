@@ -20,6 +20,21 @@ torno alle 15 e non voglio trovarla bollente?*
 5. **Previsione** — campionando la giornata ogni 10 minuti esce la fascia oraria "sole/ombra"
    che vedi nella barra colorata: *ombra fino alle 17:20, ancora 2 h 10 min*.
 
+## Guardare un'altra zona
+
+Non serve essere sul posto. Cerchi una via o una piazza nella barra in alto e l'app scarica
+edifici e alberi di *quella* zona, ci sposta la mappa e ricalcola tutto lì: è il modo per
+decidere prima di partire dove conviene parcheggiare quando arrivi. Lo stesso succede
+toccando un punto lontano sulla mappa — se cade fuori dall'area già scaricata, i dati vengono
+presi intorno a quel punto.
+
+Mentre esplori, il GPS aggiorna solo il puntino blu: i dati non seguono i tuoi passi, o la
+zona che hai appena scelto scapperebbe via. Una riga in alto ricorda dove stai guardando e
+riporta alla tua posizione con un tocco.
+
+La vista in realtà aumentata, in quel caso, dice che non ha niente da mostrare invece di
+sovrapporre ombre finte: può parlare solo di dove ti trovi davvero.
+
 ## Il posto auto
 
 Quando parcheggi salvi il punto con un tocco: l'app lo ricorda fra un avvio e l'altro e lo
@@ -79,9 +94,10 @@ OmbraParking/
 │   ├── shadow/ShadeTimeline.kt  # previsione oraria su un punto
 │   ├── ar/CameraProjector.kt    # proiezione prospettica con clipping
 │   ├── alarm/SunWarning.kt      # quando far scattare l'avviso di sole in arrivo
-│   └── osm/                     # query Overpass, parsing, stima delle altezze
+│   ├── geo/DataCoverage.kt      # fin dove ci si può fidare dei dati scaricati
+│   └── osm/                     # Overpass, ricerca dei luoghi, stima delle altezze
 └── app/                         # Android: Compose, CameraX, osmdroid, sensori, WorkManager
-    ├── data/                    # posizione, orientamento, Overpass, posto auto, notifica
+    ├── data/                    # posizione, orientamento, Overpass, luoghi, posto auto, notifica
     └── ui/map, ui/ar, ui/components
 ```
 
@@ -93,7 +109,7 @@ emulatore, ed è dove vive la logica che conta.
 Serve Android Studio (Ladybug o più recente) oppure JDK 17+ e l'Android SDK con API 35.
 
 ```bash
-./gradlew :core:test        # test della logica (59 test, nessun emulatore)
+./gradlew :core:test        # test della logica (69 test, nessun emulatore)
 ./gradlew :app:assembleDebug
 ```
 

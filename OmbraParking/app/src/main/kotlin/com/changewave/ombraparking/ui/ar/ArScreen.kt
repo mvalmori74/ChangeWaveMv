@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +78,7 @@ fun ArScreen(
     onNow: () -> Unit,
     onPark: () -> Unit,
     onClearParkedCar: () -> Unit,
+    onBackToMyPosition: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val view = LocalView.current
@@ -154,8 +156,14 @@ fun ArScreen(
         plane.toLocal(user)
     }
 
-    val shapes = remember(state.shadowShapes, userLocal) {
-        if (userLocal == null) emptyList() else toUserCentredShapes(state.shadowShapes, userLocal, EYE_HEIGHT_M)
+    // Se i dati caricati sono di un'altra zona qui non c'è niente di vero da sovrapporre:
+    // meglio una schermata onesta che ombre inventate su edifici che non conosciamo.
+    val shapes = remember(state.shadowShapes, userLocal, state.coversUserLocation) {
+        if (userLocal == null || !state.coversUserLocation) {
+            emptyList()
+        } else {
+            toUserCentredShapes(state.shadowShapes, userLocal, EYE_HEIGHT_M)
+        }
     }
 
     // Posizione dell'auto rispetto a chi guarda: serve per piantarci il segnaposto.
@@ -200,14 +208,24 @@ fun ArScreen(
             drawReticle(reticleShade?.quality?.color ?: Color.White)
         }
 
-        ReticleLabel(
-            shade = reticleShade,
-            distanceMeters = reticleDistance,
-            compassAccuracy = orientation?.magneticAccuracy,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 24.dp, start = 16.dp, end = 16.dp),
-        )
+        if (state.isExploring && !state.coversUserLocation) {
+            ExplorationNotice(
+                name = state.explorationName,
+                onBackToMyPosition = onBackToMyPosition,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+            )
+        } else {
+            ReticleLabel(
+                shade = reticleShade,
+                distanceMeters = reticleDistance,
+                compassAccuracy = orientation?.magneticAccuracy,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+            )
+        }
 
         MaterialSurface(
             modifier = Modifier
@@ -240,6 +258,42 @@ fun ArScreen(
                     onMinuteSelected = onMinuteSelected,
                     onNow = onNow,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Avviso che sostituisce il mirino quando si stanno guardando le ombre di un'altra zona:
+ * la realtà aumentata può parlare solo di dove ci si trova davvero.
+ */
+@Composable
+private fun ExplorationNotice(
+    name: String?,
+    onBackToMyPosition: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    MaterialSurface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                text = "Stai esplorando ${name ?: "un'altra zona"}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "Qui la realtà aumentata non ha edifici da mostrare: gli ombreggiamenti " +
+                    "caricati sono di un altro posto.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            TextButton(
+                onClick = onBackToMyPosition,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text("Torna alla mia posizione")
             }
         }
     }

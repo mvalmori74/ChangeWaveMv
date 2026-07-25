@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.changewave.ombraparking.data.ObstacleRepository
 import com.changewave.ombraparking.data.ParkedCarStore
+import com.changewave.ombraparking.data.PlaceRepository
 import com.changewave.ombraparking.data.SunAlarmScheduler
 import java.io.File
 import org.osmdroid.config.Configuration
@@ -16,6 +17,9 @@ class OmbraParkingApplication : Application() {
 
     /** Cache degli ostacoli condivisa fra mappa e realtà aumentata. */
     val obstacleRepository: ObstacleRepository by lazy { ObstacleRepository(userAgent = userAgent()) }
+
+    /** Ricerca dei luoghi per nome. */
+    val placeRepository: PlaceRepository by lazy { PlaceRepository(userAgent = userAgent()) }
 
     /** Posto auto salvato, condiviso dalle due viste. */
     val parkedCarStore: ParkedCarStore by lazy { ParkedCarStore(this) }

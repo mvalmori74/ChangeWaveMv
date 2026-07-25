@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,9 +35,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.changewave.ombraparking.core.geo.LatLng
 import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.geo.Vec2
+import com.changewave.ombraparking.core.osm.Place
 import com.changewave.ombraparking.core.shadow.ObstacleKind
 import com.changewave.ombraparking.ui.ShadowUiState
+import com.changewave.ombraparking.ui.components.ExplorationBanner
 import com.changewave.ombraparking.ui.components.ParkedCarBar
+import com.changewave.ombraparking.ui.components.PlaceSearchBar
 import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeSummaryCard
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
@@ -62,6 +66,9 @@ fun MapScreen(
     onRefresh: () -> Unit,
     onPark: () -> Unit,
     onClearParkedCar: () -> Unit,
+    onSearchPlace: (String) -> Unit,
+    onPlaceSelected: (Place) -> Unit,
+    onDismissPlaceResults: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -106,6 +113,14 @@ fun MapScreen(
     }
 
     var hasCentered by remember { mutableStateOf(false) }
+
+    // Scegliere un'altra zona porta la mappa lì: altrimenti si vedrebbero le ombre
+    // ricalcolate ma la vista resterebbe dove si è.
+    LaunchedEffect(state.explorationCenter) {
+        state.explorationCenter?.let { center ->
+            mapView.controller.animateTo(GeoPoint(center.latitude, center.longitude))
+        }
+    }
 
     val shadowGeometry = remember(state.shadowShapes, state.plane) {
         toGeoPoints(state.plane, state.shadowShapes)
@@ -158,12 +173,33 @@ fun MapScreen(
             }
         }
 
-        StatusBanner(
-            state = state,
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
+                .fillMaxWidth(0.78f)
                 .padding(12.dp),
-        )
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PlaceSearchBar(
+                results = state.placeResults,
+                isSearching = state.isSearchingPlaces,
+                onSearch = onSearchPlace,
+                onPlaceSelected = onPlaceSelected,
+                onDismissResults = onDismissPlaceResults,
+            )
+            if (state.isExploring) {
+                ExplorationBanner(
+                    name = state.explorationName,
+                    onBackToMyPosition = {
+                        onFollowUser()
+                        state.userLocation?.let {
+                            mapView.controller.animateTo(GeoPoint(it.latitude, it.longitude))
+                        }
+                    },
+                )
+            }
+            StatusBanner(state = state)
+        }
 
         Column(
             modifier = Modifier

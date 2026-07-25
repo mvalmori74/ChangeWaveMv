@@ -5,9 +5,11 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.changewave.ombraparking.OmbraParkingApplication
+import com.changewave.ombraparking.core.geo.DataCoverage
 import com.changewave.ombraparking.core.geo.LatLng
 import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.geo.Vec2
+import com.changewave.ombraparking.core.osm.Place
 import com.changewave.ombraparking.core.shadow.Obstacle
 import com.changewave.ombraparking.core.shadow.ShadeForecast
 import com.changewave.ombraparking.core.shadow.ShadeInfo
@@ -22,6 +24,7 @@ import com.changewave.ombraparking.data.LocationTracker
 import com.changewave.ombraparking.data.ObstacleRepository
 import com.changewave.ombraparking.data.ParkedCar
 import com.changewave.ombraparking.data.ParkedCarStore
+import com.changewave.ombraparking.data.PlaceRepository
 import com.changewave.ombraparking.data.SunAlarmScheduler
 import java.time.Instant
 import java.time.LocalDate
@@ -64,8 +67,19 @@ data class ShadowUiState(
     val target: LatLng? = null,
     /** Finché è vero il bersaglio segue l'utente; toccando la mappa si sgancia. */
     val targetFollowsUser: Boolean = true,
+    /**
+     * Zona su cui si sta ragionando quando non è quella in cui ci si trova.
+     * Serve a rispondere a "domani parcheggio in centro: dove sarà ombra alle 15?".
+     */
+    val explorationCenter: LatLng? = null,
+    /** Nome della zona esplorata, quando è stata scelta cercandola. */
+    val explorationName: String? = null,
+    val placeResults: List<Place> = emptyList(),
+    val isSearchingPlaces: Boolean = false,
     val plane: LocalPlane? = null,
     val obstacles: List<Obstacle> = emptyList(),
+    /** Raggio entro cui sono stati scaricati gli ostacoli intorno a [plane]. */
+    val dataRadiusMeters: Int = ObstacleRepository.DEFAULT_RADIUS_M,
     /** Sagome d'ombra all'ora scelta, in metri locali rispetto a [plane]. */
     val shadowShapes: List<List<Vec2>> = emptyList(),
     val sun: SunPosition? = null,
@@ -85,6 +99,23 @@ data class ShadowUiState(
 
     val hasData: Boolean get() = plane != null
 
+    /** Vero quando si stanno guardando le ombre di un posto diverso da dove ci si trova. */
+    val isExploring: Boolean get() = explorationCenter != null
+
+    /** Punto intorno a cui vengono scaricati gli edifici. */
+    val analysisCenter: LatLng? get() = explorationCenter ?: userLocation
+
+    /**
+     * Vero se la posizione dell'utente è dentro l'area di cui conosciamo gli edifici:
+     * è la condizione perché la vista in realtà aumentata abbia qualcosa da mostrare.
+     */
+    val coversUserLocation: Boolean
+        get() {
+            val origin = plane?.origin ?: return false
+            val user = userLocation ?: return false
+            return DataCoverage.isReliable(origin, user, dataRadiusMeters)
+        }
+
     /** Posizione del bersaglio nel piano locale, se entrambi sono noti. */
     val targetLocal: Vec2?
         get() {
@@ -98,6 +129,8 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository: ObstacleRepository =
         (application as OmbraParkingApplication).obstacleRepository
+    private val placeRepository: PlaceRepository =
+        (application as OmbraParkingApplication).placeRepository
     private val parkedCarStore: ParkedCarStore =
         (application as OmbraParkingApplication).parkedCarStore
     private val sunAlarmScheduler: SunAlarmScheduler =
@@ -110,6 +143,7 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
     private var locationJob: Job? = null
     private var loadJob: Job? = null
     private var computeJob: Job? = null
+    private var searchJob: Job? = null
 
     /** Centro dell'ultima richiesta andata a buon fine: dice quando ci si è spostati davvero. */
     private var lastLoadedCenter: LatLng? = null
@@ -175,6 +209,10 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
             target = if (previous.target == null || previous.targetFollowsUser) position else previous.target,
         )
 
+        // Mentre si esplora un'altra zona il GPS aggiorna solo il puntino blu: spostare i
+        // dati dietro a chi cammina vanificherebbe la scelta appena fatta.
+        if (previous.isExploring) return
+
         val center = lastLoadedCenter
         val movedFar = center == null || LocalPlane(center).distanceMeters(center, position) > RELOAD_DISTANCE_M
         if (isFirstFix || movedFar) {
@@ -201,17 +239,87 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         setTime(now.hour * 60 + now.minute)
     }
 
-    /** Punto scelto toccando la mappa. */
+    /**
+     * Punto scelto toccando la mappa.
+     *
+     * Se cade fuori dall'area di cui abbiamo gli edifici, quella zona diventa la nuova zona
+     * analizzata e i dati vengono riscaricati lì: toccare un punto lontano vuol dire volere
+     * la risposta *in quel punto*, non un verdetto basato su edifici che non conosciamo.
+     */
     fun selectTarget(position: LatLng) {
-        _state.value = _state.value.copy(target = position, targetFollowsUser = false)
-        recompute()
+        val snapshot = _state.value
+        val origin = snapshot.plane?.origin
+        val needsData = origin == null ||
+            !DataCoverage.isReliable(origin, position, snapshot.dataRadiusMeters)
+
+        _state.value = snapshot.copy(
+            target = position,
+            targetFollowsUser = false,
+            explorationCenter = if (needsData) position else snapshot.explorationCenter,
+            explorationName = if (needsData) null else snapshot.explorationName,
+        )
+
+        if (needsData) loadObstacles(position) else recompute()
     }
 
-    /** Riporta l'analisi sulla propria posizione. */
+    /** Cerca un luogo per nome; i risultati finiscono in [ShadowUiState.placeResults]. */
+    fun searchPlaces(query: String) {
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _state.value = _state.value.copy(placeResults = emptyList(), isSearchingPlaces = false)
+            return
+        }
+        searchJob = viewModelScope.launch {
+            _state.value = _state.value.copy(isSearchingPlaces = true, errorMessage = null)
+            try {
+                val places = placeRepository.search(query)
+                _state.value = _state.value.copy(
+                    placeResults = places,
+                    isSearchingPlaces = false,
+                    errorMessage = if (places.isEmpty()) "Nessun luogo trovato per \"$query\"" else null,
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                _state.value = _state.value.copy(
+                    isSearchingPlaces = false,
+                    errorMessage = "Ricerca non riuscita: ${error.message ?: "rete non raggiungibile"}",
+                )
+            }
+        }
+    }
+
+    fun clearPlaceResults() {
+        searchJob?.cancel()
+        _state.value = _state.value.copy(placeResults = emptyList(), isSearchingPlaces = false)
+    }
+
+    /** Sposta l'analisi sul luogo scelto fra i risultati della ricerca. */
+    fun explorePlace(place: Place) {
+        _state.value = _state.value.copy(
+            explorationCenter = place.position,
+            explorationName = place.shortName,
+            target = place.position,
+            targetFollowsUser = false,
+            placeResults = emptyList(),
+            isSearchingPlaces = false,
+            errorMessage = null,
+        )
+        loadObstacles(place.position)
+    }
+
+    /** Riporta analisi e dati sulla propria posizione, uscendo dall'esplorazione. */
     fun followUserLocation() {
-        val user = _state.value.userLocation ?: return
-        _state.value = _state.value.copy(target = user, targetFollowsUser = true)
-        recompute()
+        val snapshot = _state.value
+        val user = snapshot.userLocation ?: return
+        val wasExploring = snapshot.isExploring
+        _state.value = snapshot.copy(
+            target = user,
+            targetFollowsUser = true,
+            explorationCenter = null,
+            explorationName = null,
+        )
+        if (wasExploring) loadObstacles(user) else recompute()
     }
 
     fun refresh() {
@@ -251,6 +359,7 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
                 _state.value = _state.value.copy(
                     plane = set.plane,
                     obstacles = set.obstacles,
+                    dataRadiusMeters = set.radiusMeters,
                     isLoadingObstacles = false,
                 )
                 recompute()
@@ -345,7 +454,7 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
     private fun parkedCarStatus(snapshot: ShadowUiState, plane: LocalPlane): ParkedCarStatus? {
         val car = snapshot.parkedCar ?: return null
         val carLocal = plane.toLocal(car.position)
-        if (carLocal.length > PARKED_ANALYSIS_RADIUS_M) return null
+        if (!DataCoverage.isReliable(carLocal, snapshot.dataRadiusMeters)) return null
 
         val now = Instant.now()
         val info = ShadowEngine.shadeAt(carLocal, snapshot.obstacles, SolarPosition.at(now, car.position))
@@ -384,8 +493,5 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         /** Attesa minima fra due tentativi automatici dopo un errore di rete. */
         const val RETRY_COOLDOWN_MS = 20_000L
         const val FORECAST_STEP_MINUTES = 10
-
-        /** Distanza dal centro dei dati oltre la quale non si azzarda un verdetto sull'auto. */
-        const val PARKED_ANALYSIS_RADIUS_M = 250.0
     }
 }
