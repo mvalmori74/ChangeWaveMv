@@ -1,6 +1,7 @@
 package com.changewave.ombraparking.ui
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.changewave.ombraparking.OmbraParkingApplication
@@ -26,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,8 +111,14 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
     private var loadJob: Job? = null
     private var computeJob: Job? = null
 
-    /** Centro dell'ultima richiesta: serve a capire quando l'utente si è spostato davvero. */
+    /** Centro dell'ultima richiesta andata a buon fine: dice quando ci si è spostati davvero. */
     private var lastLoadedCenter: LatLng? = null
+
+    /** Centro della richiesta in volo, valido solo mentre [loadJob] è attivo. */
+    private var loadingCenter: LatLng? = null
+
+    /** Quando è fallito l'ultimo tentativo: senza dati il GPS ne chiederebbe uno a ogni fix. */
+    private var lastFailureAtMillis = 0L
 
     init {
         viewModelScope.launch {
@@ -211,20 +219,46 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         loadObstacles(center, forceRefresh = true)
     }
 
+    /**
+     * Scarica gli ostacoli intorno a [center].
+     *
+     * Overpass può metterci diversi secondi, e nel frattempo il GPS continua a mandare
+     * aggiornamenti: se ognuno facesse ripartire il download annullerebbe quello in corso,
+     * e il primo caricamento non arriverebbe mai in fondo. Finché una richiesta per questa
+     * stessa zona è in volo, quindi, si lascia lavorare quella.
+     */
     private fun loadObstacles(center: LatLng, forceRefresh: Boolean = false) {
+        val inFlight = loadingCenter
+        if (!forceRefresh && loadJob?.isActive == true && inFlight != null &&
+            LocalPlane(inFlight).distanceMeters(inFlight, center) <= RELOAD_DISTANCE_M
+        ) {
+            return
+        }
+
+        // Dopo un errore si riprova da soli al prossimo fix, ma non prima del tempo di attesa:
+        // se Overpass è in affanno, tempestarlo di richieste non aiuta nessuno.
+        val sinceFailure = SystemClock.elapsedRealtime() - lastFailureAtMillis
+        if (!forceRefresh && lastFailureAtMillis > 0L && sinceFailure < RETRY_COOLDOWN_MS) return
+
         loadJob?.cancel()
+        loadingCenter = center
         loadJob = viewModelScope.launch {
             _state.value = _state.value.copy(isLoadingObstacles = true, errorMessage = null)
             try {
                 val set = repository.obstaclesAround(center, forceRefresh = forceRefresh)
                 lastLoadedCenter = set.center
+                lastFailureAtMillis = 0L
                 _state.value = _state.value.copy(
                     plane = set.plane,
                     obstacles = set.obstacles,
                     isLoadingObstacles = false,
                 )
                 recompute()
+            } catch (cancellation: CancellationException) {
+                // Download sostituito da uno più recente: non è un errore da mostrare.
+                throw cancellation
             } catch (error: Exception) {
+                lastFailureAtMillis = SystemClock.elapsedRealtime()
                 _state.value = _state.value.copy(
                     isLoadingObstacles = false,
                     errorMessage = "Non riesco a scaricare gli edifici: ${error.message ?: "rete non raggiungibile"}",
@@ -346,6 +380,9 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
     private companion object {
         /** Oltre questo spostamento vale la pena riscaricare gli edifici intorno. */
         const val RELOAD_DISTANCE_M = 150.0
+
+        /** Attesa minima fra due tentativi automatici dopo un errore di rete. */
+        const val RETRY_COOLDOWN_MS = 20_000L
         const val FORECAST_STEP_MINUTES = 10
 
         /** Distanza dal centro dei dati oltre la quale non si azzarda un verdetto sull'auto. */
