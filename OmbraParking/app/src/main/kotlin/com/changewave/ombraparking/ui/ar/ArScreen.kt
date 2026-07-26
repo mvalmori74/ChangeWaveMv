@@ -56,6 +56,8 @@ import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.label
 import java.time.LocalDate
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -359,34 +361,68 @@ private fun CameraPreview(
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
-    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val provider = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
     val currentOnOptics by rememberUpdatedState(onOptics)
 
-    AndroidView(factory = { previewView }, modifier = modifier)
+    Box(modifier) {
+        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
-    LaunchedEffect(previewView) {
-        val cameraProvider = context.awaitCameraProvider()
-        provider = cameraProvider
-
-        val preview = Preview.Builder().build()
-        preview.setSurfaceProvider(previewView.surfaceProvider)
-        cameraProvider.unbindAll()
-        val camera = cameraProvider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_BACK_CAMERA,
-            preview,
-        )
-
-        val resolutionInfo = preview.resolutionInfo
-        currentOnOptics(
-            CameraOptics.sensorFieldOfView(camera.cameraInfo),
-            CameraOptics.sourceAspectRatio(resolutionInfo),
-            resolutionInfo?.rotationDegrees ?: 90,
-        )
+        // Senza questo avviso un guasto della fotocamera sarebbe solo uno schermo nero.
+        cameraError?.let { message ->
+            MaterialSurface(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(24.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 
-    DisposableEffect(provider) {
-        onDispose { provider?.unbindAll() }
+    LaunchedEffect(previewView) {
+        try {
+            val cameraProvider = context.awaitCameraProvider()
+            provider.value = cameraProvider
+
+            val preview = Preview.Builder().build()
+            preview.setSurfaceProvider(previewView.surfaceProvider)
+            cameraProvider.unbindAll()
+            val camera = cameraProvider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+            )
+            cameraError = null
+
+            val resolutionInfo = preview.resolutionInfo
+            currentOnOptics(
+                CameraOptics.sensorFieldOfView(camera.cameraInfo),
+                CameraOptics.sourceAspectRatio(resolutionInfo),
+                resolutionInfo?.rotationDegrees ?: 90,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            cameraError = "Fotocamera non disponibile: ${error.message ?: "errore sconosciuto"}"
+        }
+    }
+
+    /*
+     * Nessuna chiave, e non è una svista: con `DisposableEffect(provider)` il cambio di
+     * stato da null a provider faceva scattare l'onDispose del passaggio precedente, che
+     * legge il valore *corrente* e quindi sganciava la fotocamera appena agganciata.
+     * Restava l'overlay disegnato su uno sfondo nero. Qui l'unbind avviene solo uscendo
+     * davvero dalla schermata.
+     */
+    DisposableEffect(Unit) {
+        onDispose { provider.value?.unbindAll() }
     }
 }
 
@@ -428,9 +464,9 @@ private suspend fun android.content.Context.awaitCameraProvider(): ProcessCamera
                 try {
                     continuation.resume(future.get())
                 } catch (error: Exception) {
-                    // Fotocamera non disponibile: la vista AR resta senza anteprima
-                    // invece di far cadere l'app.
-                    continuation.cancel(error)
+                    // L'errore va propagato, non inghiottito: chi chiama lo trasforma in un
+                    // messaggio a schermo invece di lasciare l'anteprima nera e muta.
+                    continuation.resumeWithException(error)
                 }
             },
             ContextCompat.getMainExecutor(this),
