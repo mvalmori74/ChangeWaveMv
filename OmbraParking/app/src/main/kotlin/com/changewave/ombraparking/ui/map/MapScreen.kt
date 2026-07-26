@@ -44,7 +44,7 @@ import com.changewave.ombraparking.ui.components.PlaceSearchBar
 import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeSummaryCard
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint

@@ -26,10 +26,16 @@ import com.changewave.ombraparking.data.ParkedCar
 import com.changewave.ombraparking.data.ParkedCarStore
 import com.changewave.ombraparking.data.PlaceRepository
 import com.changewave.ombraparking.data.SunAlarmScheduler
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,10 +64,12 @@ data class ParkedCarStatus(
  * dati con occhi diversi, quindi tenere due stati separati porterebbe solo a divergenze.
  */
 data class ShadowUiState(
-    val zone: ZoneId = ZoneId.systemDefault(),
-    val date: LocalDate = LocalDate.now(),
+    val zone: TimeZone = TimeZone.currentSystemDefault(),
+    val date: LocalDate = Clock.System.todayIn(TimeZone.currentSystemDefault()),
     /** Ora scelta con lo slider, in minuti dalla mezzanotte. */
-    val minuteOfDay: Int = LocalTime.now().hour * 60 + LocalTime.now().minute,
+    val minuteOfDay: Int = Clock.System.now()
+        .toLocalDateTime(TimeZone.currentSystemDefault())
+        .let { it.hour * 60 + it.minute },
     val userLocation: LatLng? = null,
     /** Punto di cui si vuole sapere l'ombra: di default la posizione dell'utente. */
     val target: LatLng? = null,
@@ -95,7 +103,7 @@ data class ShadowUiState(
 ) {
     /** Istante corrispondente a data e ora scelte. */
     val instant: Instant
-        get() = date.atStartOfDay(zone).plusMinutes(minuteOfDay.toLong()).toInstant()
+        get() = date.atStartOfDayIn(zone) + minuteOfDay.minutes
 
     val hasData: Boolean get() = plane != null
 
@@ -234,8 +242,9 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Riporta lo slider all'ora attuale. */
     fun useCurrentTime() {
-        val now = LocalTime.now(_state.value.zone)
-        _state.value = _state.value.copy(date = LocalDate.now(_state.value.zone))
+        val zone = _state.value.zone
+        val now = Clock.System.now().toLocalDateTime(zone)
+        _state.value = _state.value.copy(date = now.date)
         setTime(now.hour * 60 + now.minute)
     }
 
@@ -400,8 +409,8 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
                         point = targetLocal,
                         obstacles = snapshot.obstacles,
                         location = reference,
-                        from = snapshot.date.atStartOfDay(snapshot.zone).toInstant(),
-                        to = snapshot.date.plusDays(1).atStartOfDay(snapshot.zone).toInstant(),
+                        from = snapshot.date.atStartOfDayIn(snapshot.zone),
+                        to = snapshot.date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(snapshot.zone),
                         stepMinutes = FORECAST_STEP_MINUTES,
                     )
                 } else {
@@ -456,9 +465,11 @@ class ShadowViewModel(application: Application) : AndroidViewModel(application) 
         val carLocal = plane.toLocal(car.position)
         if (!DataCoverage.isReliable(carLocal, snapshot.dataRadiusMeters)) return null
 
-        val now = Instant.now()
+        val now = Clock.System.now()
         val info = ShadowEngine.shadeAt(carLocal, snapshot.obstacles, SolarPosition.at(now, car.position))
-        val endOfDay = LocalDate.now(snapshot.zone).plusDays(1).atStartOfDay(snapshot.zone).toInstant()
+        val endOfDay = Clock.System.todayIn(snapshot.zone)
+            .plus(1, DateTimeUnit.DAY)
+            .atStartOfDayIn(snapshot.zone)
         val forecast = ShadeTimeline.compute(
             point = carLocal,
             obstacles = snapshot.obstacles,

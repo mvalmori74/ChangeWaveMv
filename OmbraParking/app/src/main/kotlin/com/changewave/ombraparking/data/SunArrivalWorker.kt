@@ -6,7 +6,7 @@ import androidx.work.WorkerParameters
 import com.changewave.ombraparking.OmbraParkingApplication
 import com.changewave.ombraparking.core.geo.LatLng
 import com.changewave.ombraparking.core.geo.LocalPlane
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /**
  * Mostra l'avviso all'orario programmato.
@@ -34,7 +34,7 @@ class SunArrivalWorker(
         val moved = LocalPlane(scheduledFor).distanceMeters(scheduledFor, car.position)
         if (moved > MAX_DRIFT_M) return Result.success()
 
-        SunArrivalNotifier(applicationContext).notifySunArriving(Instant.ofEpochMilli(arrivalMillis))
+        SunArrivalNotifier(applicationContext).notifySunArriving(Instant.fromEpochMilliseconds(arrivalMillis))
         return Result.success()
     }
 

@@ -86,7 +86,7 @@ correzioni fanno la differenza fra un overlay allineato e uno storto:
 
 ```
 OmbraParking/
-├── core/                        # Kotlin puro, nessuna dipendenza da Android → testabile
+├── core/                        # Kotlin multipiattaforma: JVM (Android) + iOS → testabile
 │   ├── geo/Geometry.kt          # Vec2/Vec3, piano tangente locale, poligoni, raycast
 │   ├── sun/SolarPosition.kt     # algoritmo NOAA
 │   ├── sun/SunTimes.kt          # alba, tramonto, mezzogiorno solare
@@ -101,15 +101,18 @@ OmbraParking/
     └── ui/map, ui/ar, ui/components
 ```
 
-Tutta la matematica sta in `core`, che è un modulo JVM puro: si può eseguire e testare senza
-emulatore, ed è dove vive la logica che conta.
+Tutta la matematica sta in `core`, un modulo **Kotlin Multiplatform** senza dipendenze da
+Android: si esegue e si testa su una macchina qualsiasi, senza emulatori, ed è dove vive la
+logica che conta. Gli stessi sorgenti compilano per la JVM (che serve all'app Android) e per
+iOS: quando arriverà l'app per iPhone userà esattamente questo codice, già verificato, invece
+di una seconda traduzione da tenere allineata.
 
 ## Compilare
 
 Serve Android Studio (Ladybug o più recente) oppure JDK 17+ e l'Android SDK con API 35.
 
 ```bash
-./gradlew :core:test        # test della logica (69 test, nessun emulatore)
+./gradlew :core:jvmTest     # test della logica (69 test, nessun emulatore)
 ./gradlew :app:assembleDebug
 ```
 

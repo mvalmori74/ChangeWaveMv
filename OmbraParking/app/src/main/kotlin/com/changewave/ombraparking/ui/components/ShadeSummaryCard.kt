@@ -23,7 +23,6 @@ import com.changewave.ombraparking.ui.color
 import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.formatDuration
 import com.changewave.ombraparking.ui.label
-import java.time.Duration
 
 /** Il verdetto sul punto scelto: è la risposta alla domanda "qui ci sarà ombra?". */
 @Composable
@@ -105,7 +104,7 @@ private fun transitionText(state: ShadowUiState): String {
             if (end == null) {
                 "Resta all'ombra per tutto il giorno"
             } else {
-                val minutes = Duration.between(instant, end).toMinutes().toInt()
+                val minutes = (end - instant).inWholeMinutes.toInt()
                 "Ombra fino alle ${end.asClockTime(zone)} (ancora ${formatDuration(minutes)})"
             }
         }
@@ -115,7 +114,7 @@ private fun transitionText(state: ShadowUiState): String {
             if (next == null) {
                 "Nessuna ombra prevista qui per il resto della giornata"
             } else {
-                val minutes = Duration.between(instant, next).toMinutes().toInt()
+                val minutes = (next - instant).inWholeMinutes.toInt()
                 "Ombra dalle ${next.asClockTime(zone)} (fra ${formatDuration(minutes)})"
             }
         }

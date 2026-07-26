@@ -54,7 +54,7 @@ import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
 import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.label
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException

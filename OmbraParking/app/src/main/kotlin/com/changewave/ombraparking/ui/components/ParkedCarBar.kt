@@ -30,8 +30,7 @@ import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.formatDistance
 import com.changewave.ombraparking.ui.formatDuration
 import com.changewave.ombraparking.ui.relativePosition
-import java.time.Duration
-import java.time.ZoneId
+import kotlinx.datetime.TimeZone
 
 /**
  * Riga del posto auto: se non è salvato offre il pulsante per salvarlo, altrimenti dice
@@ -42,7 +41,7 @@ fun ParkedCarBar(
     parkedCar: ParkedCar?,
     status: ParkedCarStatus?,
     userLocation: LatLng?,
-    zone: ZoneId,
+    zone: TimeZone,
     onPark: () -> Unit,
     onClear: () -> Unit,
     /** Se presente, toccando la riga si va a vedere l'auto (ha senso solo sulla mappa). */
@@ -89,7 +88,7 @@ fun ParkedCarBar(
     }
 }
 
-private fun whereText(car: ParkedCar, userLocation: LatLng?, zone: ZoneId): String {
+private fun whereText(car: ParkedCar, userLocation: LatLng?, zone: TimeZone): String {
     val parkedAt = "parcheggiata alle ${car.parkedAt.asClockTime(zone)}"
     val user = userLocation ?: return "Auto $parkedAt"
 
@@ -103,7 +102,7 @@ private fun whereText(car: ParkedCar, userLocation: LatLng?, zone: ZoneId): Stri
     return "$where · $parkedAt"
 }
 
-private fun statusText(status: ParkedCarStatus?, zone: ZoneId): String {
+private fun statusText(status: ParkedCarStatus?, zone: TimeZone): String {
     if (status == null) return "Troppo lontana per sapere se è al sole"
 
     val prefix = "${status.quality.emoji} "
@@ -113,7 +112,7 @@ private fun statusText(status: ParkedCarStatus?, zone: ZoneId): String {
             if (arrival == null) {
                 prefix + "All'ombra per il resto della giornata"
             } else {
-                val minutes = Duration.between(status.computedAt, arrival).toMinutes().toInt()
+                val minutes = (arrival - status.computedAt).inWholeMinutes.toInt()
                 prefix + "All'ombra, il sole arriva alle ${arrival.asClockTime(zone)} " +
                     "(fra ${formatDuration(minutes)}) · ti avviso " +
                     "${SunWarning.DEFAULT_LEAD_MINUTES} min prima"
@@ -125,7 +124,7 @@ private fun statusText(status: ParkedCarStatus?, zone: ZoneId): String {
             if (shade == null) {
                 prefix + "Al sole fino al tramonto"
             } else {
-                val minutes = Duration.between(status.computedAt, shade).toMinutes().toInt()
+                val minutes = (shade - status.computedAt).inWholeMinutes.toInt()
                 prefix + "Al sole, ombra dalle ${shade.asClockTime(zone)} " +
                     "(fra ${formatDuration(minutes)})"
             }

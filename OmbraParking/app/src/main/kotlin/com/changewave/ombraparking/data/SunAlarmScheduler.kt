@@ -6,7 +6,8 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.changewave.ombraparking.core.alarm.SunWarning
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import java.util.concurrent.TimeUnit
 
 /**
@@ -38,7 +39,7 @@ class SunAlarmScheduler(context: Context) {
      * Fissa l'avviso per [sunArrivesAt]. Se non c'è nessun arrivo previsto, annulla
      * quello eventualmente programmato.
      */
-    fun schedule(car: ParkedCar, sunArrivesAt: Instant?, now: Instant = Instant.now()) {
+    fun schedule(car: ParkedCar, sunArrivesAt: Instant?, now: Instant = Clock.System.now()) {
         val trigger = SunWarning.triggerTime(sunArrivesAt, now) ?: run {
             cancel()
             return
@@ -53,10 +54,10 @@ class SunAlarmScheduler(context: Context) {
         val data = Data.Builder()
             .putDouble(SunArrivalWorker.KEY_LATITUDE, car.position.latitude)
             .putDouble(SunArrivalWorker.KEY_LONGITUDE, car.position.longitude)
-            .putLong(SunArrivalWorker.KEY_ARRIVAL_MILLIS, arrival.toEpochMilli())
+            .putLong(SunArrivalWorker.KEY_ARRIVAL_MILLIS, arrival.toEpochMilliseconds())
             .build()
 
-        val delayMillis = (trigger.toEpochMilli() - now.toEpochMilli()).coerceAtLeast(0L)
+        val delayMillis = (trigger.toEpochMilliseconds() - now.toEpochMilliseconds()).coerceAtLeast(0L)
         val work = OneTimeWorkRequestBuilder<SunArrivalWorker>()
             .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
             .setInputData(data)
@@ -84,7 +85,7 @@ class SunAlarmScheduler(context: Context) {
         val arrivalMinute: Long,
     ) {
         constructor(latitude: Double, longitude: Double, arrival: Instant) :
-            this(latitude, longitude, arrival.toEpochMilli() / 60_000L)
+            this(latitude, longitude, arrival.toEpochMilliseconds() / 60_000L)
     }
 
     private companion object {

@@ -41,7 +41,7 @@ jobs:
             "platforms;android-35" "build-tools;35.0.0"
 
       - name: Test della logica
-        run: ./gradlew :core:test
+        run: ./gradlew :core:jvmTest
 
       - name: APK di debug
         run: ./gradlew :app:assembleDebug

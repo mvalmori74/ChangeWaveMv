@@ -9,11 +9,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.changewave.ombraparking.MainActivity
 import com.changewave.ombraparking.R
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /** Costruisce e mostra l'avviso "il sole sta per arrivare sull'auto". */
 class SunArrivalNotifier(private val context: Context) {
@@ -28,14 +28,15 @@ class SunArrivalNotifier(private val context: Context) {
      */
     fun notifySunArriving(
         arrival: Instant,
-        now: Instant = Instant.now(),
-        zone: ZoneId = ZoneId.systemDefault(),
+        now: Instant = Clock.System.now(),
+        zone: TimeZone = TimeZone.currentSystemDefault(),
     ): Boolean {
         if (!manager.areNotificationsEnabled()) return false
         createChannel()
 
-        val time = DateTimeFormatter.ofPattern("HH:mm", Locale.ITALY).format(arrival.atZone(zone))
-        val minutes = Duration.between(now, arrival).toMinutes()
+        val localTime = arrival.toLocalDateTime(zone).time
+        val time = String.format(Locale.ITALY, "%02d:%02d", localTime.hour, localTime.minute)
+        val minutes = (arrival - now).inWholeMinutes
         val text = when {
             minutes <= 1 -> "Il sole ci arriva adesso (le $time)."
             minutes < 60 -> "Il sole ci arriva alle $time, fra $minutes minuti."

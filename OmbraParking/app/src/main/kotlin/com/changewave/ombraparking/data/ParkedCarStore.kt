@@ -2,7 +2,8 @@ package com.changewave.ombraparking.data
 
 import android.content.Context
 import com.changewave.ombraparking.core.geo.LatLng
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,11 +28,11 @@ class ParkedCarStore(context: Context) {
     private val _parkedCar = MutableStateFlow(read())
     val parkedCar: StateFlow<ParkedCar?> = _parkedCar.asStateFlow()
 
-    fun save(position: LatLng, parkedAt: Instant = Instant.now()) {
+    fun save(position: LatLng, parkedAt: Instant = Clock.System.now()) {
         preferences.edit()
             .putLong(KEY_LATITUDE, java.lang.Double.doubleToRawLongBits(position.latitude))
             .putLong(KEY_LONGITUDE, java.lang.Double.doubleToRawLongBits(position.longitude))
-            .putLong(KEY_PARKED_AT, parkedAt.toEpochMilli())
+            .putLong(KEY_PARKED_AT, parkedAt.toEpochMilliseconds())
             .apply()
         _parkedCar.value = ParkedCar(position, parkedAt)
     }
@@ -47,7 +48,7 @@ class ParkedCarStore(context: Context) {
         val longitude = java.lang.Double.longBitsToDouble(preferences.getLong(KEY_LONGITUDE, 0L))
         val parkedAt = preferences.getLong(KEY_PARKED_AT, 0L)
         if (!latitude.isFinite() || !longitude.isFinite() || parkedAt <= 0L) return null
-        return ParkedCar(LatLng(latitude, longitude), Instant.ofEpochMilli(parkedAt))
+        return ParkedCar(LatLng(latitude, longitude), Instant.fromEpochMilliseconds(parkedAt))
     }
 
     private companion object {

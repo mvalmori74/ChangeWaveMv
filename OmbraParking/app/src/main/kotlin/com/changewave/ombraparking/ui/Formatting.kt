@@ -5,15 +5,16 @@ import com.changewave.ombraparking.core.geo.LatLng
 import com.changewave.ombraparking.core.geo.LocalPlane
 import com.changewave.ombraparking.core.shadow.ShadeQuality
 import com.changewave.ombraparking.ui.theme.ShadeColors
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.atan2
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
-private val hourFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ITALY)
-
-fun Instant.asClockTime(zone: ZoneId): String = hourFormatter.format(atZone(zone))
+fun Instant.asClockTime(zone: TimeZone): String {
+    val time = toLocalDateTime(zone).time
+    return minuteOfDayAsClock(time.hour * 60 + time.minute)
+}
 
 fun minuteOfDayAsClock(minuteOfDay: Int): String =
     String.format(Locale.ITALY, "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)

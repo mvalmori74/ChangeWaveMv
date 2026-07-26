@@ -27,10 +27,13 @@ import com.changewave.ombraparking.core.shadow.ShadeForecast
 import com.changewave.ombraparking.ui.color
 import com.changewave.ombraparking.ui.minuteOfDayAsClock
 import com.changewave.ombraparking.ui.theme.ShadeColors
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.todayIn
 
 private const val MINUTES_IN_DAY = 24 * 60
 
@@ -70,8 +73,8 @@ fun ShadeTimelineStrip(
             val height = size.height
 
             forecast?.slots?.forEach { slot ->
-                val startMinute = Duration.between(dayStart, slot.start).toMinutes().toFloat()
-                val endMinute = Duration.between(dayStart, slot.end).toMinutes().toFloat()
+                val startMinute = (slot.start - dayStart).inWholeMinutes.toFloat()
+                val endMinute = (slot.end - dayStart).inWholeMinutes.toFloat()
                 val left = (startMinute / MINUTES_IN_DAY) * width
                 val right = (endMinute / MINUTES_IN_DAY) * width
                 drawRect(
@@ -125,14 +128,14 @@ private fun minuteAt(x: Float, width: Float): Int {
 @Composable
 fun QuickTimeChips(
     date: LocalDate,
-    zone: ZoneId,
+    zone: TimeZone,
     selectedMinute: Int,
     onDateSelected: (LocalDate) -> Unit,
     onMinuteSelected: (Int) -> Unit,
     onNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val today = LocalDate.now(zone)
+    val today = Clock.System.todayIn(zone)
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -145,8 +148,8 @@ fun QuickTimeChips(
             label = { Text("Oggi") },
         )
         FilterChip(
-            selected = date == today.plusDays(1),
-            onClick = { onDateSelected(today.plusDays(1)) },
+            selected = date == today.plus(1, DateTimeUnit.DAY),
+            onClick = { onDateSelected(today.plus(1, DateTimeUnit.DAY)) },
             label = { Text("Domani") },
         )
         FilterChip(
