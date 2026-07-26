@@ -96,9 +96,11 @@ OmbraParking/
 │   ├── alarm/SunWarning.kt      # quando far scattare l'avviso di sole in arrivo
 │   ├── geo/DataCoverage.kt      # fin dove ci si può fidare dei dati scaricati
 │   └── osm/                     # Overpass, ricerca dei luoghi, stima delle altezze
-└── app/                         # Android: Compose, CameraX, osmdroid, sensori, WorkManager
-    ├── data/                    # posizione, orientamento, Overpass, luoghi, posto auto, notifica
-    └── ui/map, ui/ar, ui/components
+├── app/                         # Android: Compose, CameraX, osmdroid, sensori, WorkManager
+│   ├── data/                    # posizione, orientamento, Overpass, luoghi, posto auto, notifica
+│   └── ui/map, ui/ar, ui/components
+└── ios/                         # iPhone: SwiftUI, AVFoundation, CoreMotion, MapKit
+    └── vedi ios/README.md       # solo sul ramo claude/ios-ombra-parking
 ```
 
 Tutta la matematica sta in `core`, un modulo **Kotlin Multiplatform** senza dipendenze da
