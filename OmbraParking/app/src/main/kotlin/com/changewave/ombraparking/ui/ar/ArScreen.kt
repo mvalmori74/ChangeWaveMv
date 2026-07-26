@@ -55,6 +55,7 @@ import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
 import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.label
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atStartOfDayIn
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
@@ -177,7 +178,7 @@ fun ArScreen(
 
     val sunPath = remember(state.date, state.zone, state.userLocation) {
         val position = state.userLocation ?: return@remember emptyList<SunPosition>()
-        val dayStart = state.date.atStartOfDay(state.zone).toInstant()
+        val dayStart = state.date.atStartOfDayIn(state.zone)
         (0 until 96).map { quarter ->
             SolarPosition.at(dayStart.plusSeconds(quarter * 15L * 60L), position)
         }
@@ -248,7 +249,7 @@ fun ArScreen(
                 )
                 ShadeTimelineStrip(
                     forecast = state.forecast,
-                    dayStart = state.date.atStartOfDay(state.zone).toInstant(),
+                    dayStart = state.date.atStartOfDayIn(state.zone),
                     selectedMinute = state.minuteOfDay,
                     onMinuteSelected = onMinuteSelected,
                 )

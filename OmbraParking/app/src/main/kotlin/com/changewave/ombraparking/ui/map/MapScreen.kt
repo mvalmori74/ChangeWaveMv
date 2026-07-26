@@ -45,6 +45,7 @@ import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeSummaryCard
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atStartOfDayIn
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -231,7 +232,7 @@ fun MapScreen(
                     )
                     ShadeTimelineStrip(
                         forecast = state.forecast,
-                        dayStart = state.date.atStartOfDay(state.zone).toInstant(),
+                        dayStart = state.date.atStartOfDayIn(state.zone),
                         selectedMinute = state.minuteOfDay,
                         onMinuteSelected = onMinuteSelected,
                     )
