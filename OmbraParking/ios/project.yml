@@ -1,0 +1,62 @@
+# Descrizione del progetto Xcode, da cui XcodeGen genera OmbraParking.xcodeproj.
+#
+# Perché non un .xcodeproj già pronto: quel file è un elenco di identificatori generati,
+# lungo migliaia di righe, che non posso né generare né verificare senza un Mac. Un errore
+# lì dentro si manifesta come un progetto che non si apre. Questo file invece è leggibile,
+# modificabile a mano e produce un progetto corretto con un comando:
+#
+#   brew install xcodegen && cd ios && xcodegen generate
+
+name: OmbraParking
+options:
+  bundleIdPrefix: com.changewave
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  OmbraParking:
+    type: application
+    platform: iOS
+    sources:
+      - path: OmbraParking
+    info:
+      path: OmbraParking/Info.plist
+      properties:
+        CFBundleDisplayName: Ombra Parking
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Le motivazioni dei permessi le legge l'utente nel dialogo di sistema:
+        # se sono vaghe, il permesso viene negato.
+        NSLocationWhenInUseUsageDescription:
+          Serve a sapere dove sei per calcolare l'ombra degli edifici intorno a te.
+        NSCameraUsageDescription:
+          Serve a sovrapporre le ombre a quello che inquadri nella vista in realtà aumentata.
+        NSMotionUsageDescription:
+          Serve a capire dove stai puntando il telefono per allineare le ombre alla strada.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.changewave.ombraparking
+        # Il framework Kotlin viene prodotto da Gradle nella cartella di build del modulo core.
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../core/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -framework
+          - OmbraCore
+    preBuildScripts:
+      - name: Compila il core Kotlin
+        # embedAndSignAppleFrameworkForXcode è il task che Kotlin/Native espone proprio per
+        # essere chiamato da Xcode: costruisce il framework per l'architettura in uso.
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :core:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false

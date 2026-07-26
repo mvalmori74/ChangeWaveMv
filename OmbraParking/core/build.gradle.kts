@@ -16,11 +16,19 @@ kotlin {
         }
     }
 
-    // I target iOS si compilano solo su macOS: la loro configurazione resta comunque qui,
-    // così il progetto è completo e su un Mac non serve toccare niente.
-    iosArm64()
-    iosSimulatorArm64()
-    iosX64()
+    /*
+     * I target iOS si compilano solo su macOS: la configurazione resta comunque qui, così
+     * su un Mac non serve toccare niente.
+     *
+     * Il framework è statico perché è la forma che Xcode collega senza passaggi aggiuntivi
+     * di firma, e si chiama OmbraCore: è il nome che il codice Swift importa.
+     */
+    listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "OmbraCore"
+            isStatic = true
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
