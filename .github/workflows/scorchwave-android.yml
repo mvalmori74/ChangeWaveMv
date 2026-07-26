@@ -9,6 +9,14 @@ on:
     paths:
       - 'scorch-android/**'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag di una release stabile (es. scorchwave-v1.0). Vuoto = aggiorna solo la release 'ultima build'."
+        required: false
+        default: ''
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -46,11 +54,21 @@ jobs:
         run: ./gradlew --no-daemon lintDebug
         continue-on-error: true
 
+      - name: Prepara l'APK
+        id: apk
+        run: |
+          set -euo pipefail
+          src=$(ls scorch-android/app/build/outputs/apk/debug/*.apk | head -1)
+          mkdir -p "$RUNNER_TEMP/release"
+          cp "$src" "$RUNNER_TEMP/release/ScorchWave-debug.apk"
+          echo "path=$RUNNER_TEMP/release/ScorchWave-debug.apk" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -h "$src" | cut -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Pubblica l'APK come artifact
         uses: actions/upload-artifact@v4
         with:
           name: scorchwave-debug-apk
-          path: scorch-android/app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
 
       - name: Pubblica il report di lint
@@ -60,3 +78,45 @@ jobs:
           name: scorchwave-lint-report
           path: scorch-android/app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
+
+      # Release "rolling": stesso tag a ogni build, quindi il link di download non cambia mai.
+      - name: Aggiorna la release "ultima build"
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=scorchwave-latest
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+            --target "$GITHUB_SHA" \
+            --title "ScorchWave — ultima build" \
+            --prerelease \
+            --notes "APK di debug di ScorchWave, aggiornato automaticamente a ogni build.
+
+          - commit: \`${GITHUB_SHA:0:7}\` (branch \`${GITHUB_REF_NAME}\`)
+          - dimensione: ${{ steps.apk.outputs.size }}
+          - minSdk 24 (Android 7.0), orientamento orizzontale
+
+          Download diretto sempre valido:
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/ScorchWave-debug.apk
+
+          Essendo un APK di debug non firmato per il Play Store, sul telefono va consentita l'installazione da origini sconosciute."
+
+      # Release stabile: si crea a mano da Actions -> Run workflow, indicando il tag.
+      - name: Pubblica la release stabile
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/release/ScorchWave-$TAG.apk"
+          gh release create "$TAG" "$RUNNER_TEMP/release/ScorchWave-$TAG.apk" \
+            --target "$GITHUB_SHA" \
+            --title "ScorchWave $TAG" \
+            --notes "APK di debug di ScorchWave.
+
+          - commit: \`${GITHUB_SHA:0:7}\`
+          - dimensione: ${{ steps.apk.outputs.size }}
+          - minSdk 24 (Android 7.0), orientamento orizzontale"

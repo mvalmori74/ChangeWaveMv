@@ -115,5 +115,15 @@ fatto girare **headless** con stub delle API grafiche:
 
 L'APK di debug viene costruito automaticamente da GitHub Actions
 (`.github/workflows/scorchwave-android.yml`) a ogni push che tocca `scorch-android/`:
-build Gradle + lint su `ubuntu-latest`, con l'APK pubblicato come artifact
-`scorchwave-debug-apk` scaricabile dalla pagina del run. Primo run verde, APK di ~2,9 MB.
+build Gradle + lint su `ubuntu-latest`. APK di ~2,9 MB.
+
+**Download diretto (sempre l'ultima build):**
+
+```
+https://github.com/mvalmori74/ChangeWaveMv/releases/download/scorchwave-latest/ScorchWave-debug.apk
+```
+
+Ogni build aggiorna la release `scorchwave-latest`, quindi il link non cambia mai.
+Per una release stabile con un tag proprio: *Actions → Build ScorchWave APK → Run
+workflow*, indicando il tag (es. `scorchwave-v1.0`). L'APK è di debug, non firmato per
+il Play Store: sul telefono va consentita l'installazione da origini sconosciute.
