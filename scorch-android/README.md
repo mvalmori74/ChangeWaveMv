@@ -113,6 +113,7 @@ fatto girare **headless** con stub delle API grafiche:
 - tutte e 9 le armi sparate e verificate su terreno e carri (esplosione, frammenti,
   divisione MIRV, rotolamento, scavo, deposito di terra)
 
-L'APK non è stato costruito in questo ambiente perché `dl.google.com` non è
-raggiungibile dal proxy della sessione (Android SDK non scaricabile): la build va
-lanciata in locale con i comandi Gradle sopra.
+L'APK di debug viene costruito automaticamente da GitHub Actions
+(`.github/workflows/scorchwave-android.yml`) a ogni push che tocca `scorch-android/`:
+build Gradle + lint su `ubuntu-latest`, con l'APK pubblicato come artifact
+`scorchwave-debug-apk` scaricabile dalla pagina del run. Primo run verde, APK di ~2,9 MB.
