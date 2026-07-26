@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icona di fallback per API < 26 (vector drawable, nessun PNG necessario). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#10182E"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+    <path
+        android:fillColor="#3E6B3A"
+        android:pathData="M6,78 C28,62 42,84 62,72 C76,64 88,72 102,66 L102,102 L6,102 Z" />
+    <path
+        android:fillColor="#FFB347"
+        android:pathData="M34,68 L70,68 L75,78 L29,78 Z" />
+    <path
+        android:fillColor="#FFD79A"
+        android:pathData="M44,58 L62,58 L67,68 L39,68 Z" />
+    <path
+        android:strokeColor="#FFD79A"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M55,60 L80,40" />
+</vector>

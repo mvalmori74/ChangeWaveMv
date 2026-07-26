@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ScorchWave</string>
+    <string name="subtitle">Artiglieria a turni · terreno distruttibile</string>
+    <string name="players">Giocatori totali</string>
+    <string name="humans">Di cui umani</string>
+    <string name="rounds">Round</string>
+    <string name="difficulty">Difficoltà IA</string>
+    <string name="wind">Vento</string>
+    <string name="start_money">Denaro iniziale</string>
+    <string name="start">INIZIA BATTAGLIA</string>
+    <string name="how_to">Trascina sul campo per mirare (direzione = angolo, lunghezza = potenza), rifinisci con i tasti e premi FUOCO.</string>
+    <string name="shop_title">Negozio armi</string>
+    <string name="close">Chiudi</string>
+</resources>
