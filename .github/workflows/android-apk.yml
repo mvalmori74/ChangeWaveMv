@@ -58,5 +58,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: report-test
-          path: OmbraParking/core/build/reports/tests/test
+          path: OmbraParking/core/build/reports/tests/jvmTest
           if-no-files-found: ignore
