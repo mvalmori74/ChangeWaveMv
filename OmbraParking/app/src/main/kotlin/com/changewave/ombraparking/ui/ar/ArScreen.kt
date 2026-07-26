@@ -54,6 +54,7 @@ import com.changewave.ombraparking.ui.components.QuickTimeChips
 import com.changewave.ombraparking.ui.components.ShadeTimelineStrip
 import com.changewave.ombraparking.ui.emoji
 import com.changewave.ombraparking.ui.label
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.atStartOfDayIn
 import kotlin.coroutines.resume
@@ -180,7 +181,7 @@ fun ArScreen(
         val position = state.userLocation ?: return@remember emptyList<SunPosition>()
         val dayStart = state.date.atStartOfDayIn(state.zone)
         (0 until 96).map { quarter ->
-            SolarPosition.at(dayStart.plusSeconds(quarter * 15L * 60L), position)
+            SolarPosition.at(dayStart + (quarter * 15).minutes, position)
         }
     }
 
