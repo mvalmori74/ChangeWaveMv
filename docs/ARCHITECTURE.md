@@ -172,3 +172,15 @@ output and no external state-machine dependency to keep in step.
 
 The default `npm test` runs with no database, no Redis and no network, which is
 what makes it usable in CI and as a pre-commit gate.
+
+### Continuous integration
+
+`.github/workflows/ai-app-factory.yml` runs on every push to the feature branch:
+
+- **verifica** — type check, build, unit tests, then the integration suite
+  against a PostgreSQL service container and the Playwright tests against a
+  running API and frontend. Publishes the web bundle as an artifact.
+- **immagini** — builds both Docker images, brings the compose stack up with
+  `--wait`, and drives a complete research run over HTTP. This is the only place
+  the BullMQ/Redis queue path is exercised, since local development uses the
+  in-process queue. The images are published as downloadable artifacts.

@@ -20,7 +20,8 @@
 | 14 | Prompt Engineer | Done |
 | 15 | Markdown export | Done |
 | 16 | Tests: unit, integration, browser | Done |
-| 17 | Docker and Docker Compose | Written; images not built in the authoring environment (registry egress blocked) |
+| 17 | Docker and Docker Compose | Done — built and exercised in CI |
+| 18 | Continuous integration | Done — `.github/workflows/ai-app-factory.yml` |
 
 ## V1 acceptance checklist
 
@@ -38,7 +39,7 @@
 | Scoring engine | `packages/shared/src/scoring.ts`, `apps/api/src/scoring/engine.ts` |
 | PRD generator | `apps/api/src/agents/definitions/prd-generator.agent.ts` |
 | Prompt engineer | `apps/api/src/agents/definitions/prompt-engineer.agent.ts` |
-| Automated tests | 84 unit + 8 integration + 3 browser |
+| Automated tests | 96 unit + 8 integration + 3 browser, all run in CI |
 | README | `README.md` |
 | Architecture documentation | `docs/ARCHITECTURE.md` |
 | API documentation | `docs/API.md` and live OpenAPI at `/docs` |

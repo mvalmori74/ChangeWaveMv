@@ -77,6 +77,15 @@ SEARCH_PROVIDER=tavily
 TAVILY_API_KEY=tvly-…
 ```
 
+## Continuous integration
+
+Every push to the feature branch runs
+[`.github/workflows/ai-app-factory.yml`](.github/workflows/ai-app-factory.yml):
+type check, build, unit tests, integration tests against a real PostgreSQL,
+Playwright smoke tests, then both Docker images and a full `docker compose` stack
+driven through a complete research run. The built frontend bundle and the Docker
+images are published as artifacts on the workflow run page.
+
 ## What it does
 
 1. **Research.** Trend, market, competitor and review agents gather evidence.
