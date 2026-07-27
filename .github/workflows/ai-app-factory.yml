@@ -186,22 +186,26 @@ jobs:
       - name: Registrazione e giro completo di ricerca
         run: |
           set -euo pipefail
-          TOKEN=$(curl -fsS -X POST http://localhost:3000/api/auth/register \
+          # --fail-with-body: senza, una risposta 4xx si perde e resta solo un
+          # codice di uscita da interpretare a mano nei log.
+          api() { curl -sS --fail-with-body "$@"; }
+
+          TOKEN=$(api -X POST http://localhost:3000/api/auth/register \
             -H 'content-type: application/json' \
-            -d '{"name":"CI","email":"ci@example.com","password":"password123"}' \
+            -d '{"name":"CI smoke","email":"ci@example.com","password":"password123"}' \
             | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 
-          PROJECT=$(curl -fsS -X POST http://localhost:3000/api/research/projects \
+          PROJECT=$(api -X POST http://localhost:3000/api/research/projects \
             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-            -d '{"name":"CI","sector":"industrial maintenance","country":"Italy","platform":"ANDROID"}' \
+            -d '{"name":"CI smoke run","sector":"industrial maintenance","country":"Italy","platform":"ANDROID"}' \
             | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
-          RUN=$(curl -fsS -X POST "http://localhost:3000/api/research/projects/$PROJECT/runs" \
+          RUN=$(api -X POST "http://localhost:3000/api/research/projects/$PROJECT/runs" \
             -H "authorization: Bearer $TOKEN" \
             | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
           for i in $(seq 1 60); do
-            STATUS=$(curl -fsS "http://localhost:3000/api/research/runs/$RUN" \
+            STATUS=$(api "http://localhost:3000/api/research/runs/$RUN" \
               -H "authorization: Bearer $TOKEN" \
               | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
             echo "run: $STATUS"
@@ -213,7 +217,7 @@ jobs:
           done
           [ "$STATUS" = "COMPLETED" ] || { echo "Timeout della run"; exit 1; }
 
-          TOTAL=$(curl -fsS "http://localhost:3000/api/opportunities?projectId=$PROJECT" \
+          TOTAL=$(api "http://localhost:3000/api/opportunities?projectId=$PROJECT" \
             -H "authorization: Bearer $TOKEN" \
             | python3 -c 'import sys,json; print(json.load(sys.stdin)["total"])')
           echo "opportunità prodotte: $TOTAL"
