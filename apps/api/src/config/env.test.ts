@@ -59,4 +59,38 @@ describe('loadConfig', () => {
   it('rejects an out-of-range port', () => {
     expect(() => loadConfig({ ...base, API_PORT: '70000' } as NodeJS.ProcessEnv)).toThrow();
   });
+
+  // Docker Compose renders every unset variable as an empty string, so this is
+  // the configuration the stack actually boots with by default.
+  describe('empty optional variables', () => {
+    const emptyEnv = {
+      ...base,
+      BOOTSTRAP_ADMIN_EMAIL: '',
+      BOOTSTRAP_ADMIN_PASSWORD: '',
+      REDIS_URL: '',
+      OPENAI_API_KEY: '',
+      OPENAI_BASE_URL: '',
+      TAVILY_API_KEY: '',
+    } as NodeJS.ProcessEnv;
+
+    it('treats an empty string as unset', () => {
+      const config = loadConfig(emptyEnv);
+      expect(config.BOOTSTRAP_ADMIN_EMAIL).toBeUndefined();
+      expect(config.BOOTSTRAP_ADMIN_PASSWORD).toBeUndefined();
+      expect(config.REDIS_URL).toBeUndefined();
+      expect(config.OPENAI_BASE_URL).toBeUndefined();
+    });
+
+    it('still rejects a genuinely malformed value', () => {
+      expect(() =>
+        loadConfig({ ...emptyEnv, BOOTSTRAP_ADMIN_EMAIL: 'not-an-email' } as NodeJS.ProcessEnv),
+      ).toThrow(/BOOTSTRAP_ADMIN_EMAIL/);
+    });
+
+    it('still requires a key when the provider needs one', () => {
+      expect(() =>
+        loadConfig({ ...emptyEnv, LLM_PROVIDER: 'openai' } as NodeJS.ProcessEnv),
+      ).toThrow(/OPENAI_API_KEY/);
+    });
+  });
 });
