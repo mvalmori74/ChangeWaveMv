@@ -21,7 +21,6 @@ export async function buildApp(
     // Widened to Fastify's own logger type so the instance keeps the default
     // generic parameters and route modules can take a plain FastifyInstance.
     loggerInstance: container.logger as FastifyBaseLogger,
-    disableRequestLogging: config.NODE_ENV === 'test',
     trustProxy: true,
     bodyLimit: 1_048_576,
   });

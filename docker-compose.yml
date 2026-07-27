@@ -1,0 +1,81 @@
+name: ai-app-factory
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aiaf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiaf}
+      POSTGRES_DB: ${POSTGRES_DB:-aiaf}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-aiaf} -d ${POSTGRES_DB:-aiaf}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      API_PORT: 3000
+      API_HOST: 0.0.0.0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aiaf}:${POSTGRES_PASSWORD:-aiaf}@postgres:5432/${POSTGRES_DB:-aiaf}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env - at least 32 characters}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Defaults to the offline providers: the stack comes up and is fully
+      # usable with no API key, clearly marking its output as synthetic.
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL_FAST: ${LLM_MODEL_FAST:-gpt-4o-mini}
+      LLM_MODEL_BALANCED: ${LLM_MODEL_BALANCED:-gpt-4o}
+      LLM_MODEL_DEEP: ${LLM_MODEL_DEEP:-gpt-4o}
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-mock}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      DEFAULT_RUN_BUDGET_USD: ${DEFAULT_RUN_BUDGET_USD:-5}
+      DEFAULT_RUN_TOKEN_BUDGET: ${DEFAULT_RUN_TOKEN_BUDGET:-400000}
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - '8080:80'
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

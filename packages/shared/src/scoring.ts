@@ -177,18 +177,25 @@ export function computeScore(
     };
   }
 
+  // Contributions are summed at full precision and only the total is rounded.
+  // Rounding each contribution first would make nine criteria of 80 add up to
+  // 79.99, which looks like a bug to anyone checking the arithmetic by hand.
+  let exactTotal = 0;
   const breakdown: WeightedCriterionResult[] = present.map((criterion) => {
     const score = byCriterion.get(criterion)!;
     const normalisedWeight = (weights[criterion] ?? 0) / totalWeight;
+    const rawScore = clampScore(score.rawScore);
+    const exactContribution = rawScore * normalisedWeight;
+    exactTotal += exactContribution;
     return {
       ...score,
-      rawScore: clampScore(score.rawScore),
+      rawScore,
       weight: weights[criterion] ?? 0,
-      weightedScore: round2(clampScore(score.rawScore) * normalisedWeight),
+      weightedScore: round2(exactContribution),
     };
   });
 
-  const finalScore = round2(breakdown.reduce((sum, b) => sum + b.weightedScore, 0));
+  const finalScore = round2(exactTotal);
   const confidenceScore = round2(
     breakdown.reduce(
       (sum, b) => sum + b.confidence * ((weights[b.criterion] ?? 0) / totalWeight),

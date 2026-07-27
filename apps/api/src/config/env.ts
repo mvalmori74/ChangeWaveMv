@@ -7,7 +7,9 @@ import { z } from 'zod';
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default('info'),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   API_HOST: z.string().default('0.0.0.0'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),

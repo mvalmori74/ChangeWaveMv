@@ -27,5 +27,9 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3"
+  },
+  "//overrides": "Vitest and the web app must resolve the same Vite: two copies produce incompatible plugin types.",
+  "overrides": {
+    "vite": "^6.4.3"
   }
 }

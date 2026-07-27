@@ -89,13 +89,19 @@ export interface OrchestratorRunResult {
  * single bad answer never throws away the work already paid for.
  */
 export class Orchestrator {
+  private readonly recorder: RunRecorder;
+
   constructor(
     private readonly registry: AgentRegistry,
     private readonly runner: AgentRunner,
     private readonly search: SearchProvider,
-    private readonly recorder: RunRecorder,
+    recorder: RunRecorder,
     private readonly logger: AppLogger,
-  ) {}
+  ) {
+    // Bookkeeping is best-effort: losing a telemetry write must never throw
+    // away agent output that has already been paid for.
+    this.recorder = protectRecorder(recorder, logger);
+  }
 
   async execute(options: OrchestratorRunOptions): Promise<OrchestratorRunResult> {
     const blackboard = new InMemoryBlackboard(options.initialState ?? {});
@@ -270,4 +276,28 @@ export class Orchestrator {
       finishedAt: now,
     });
   }
+}
+
+/**
+ * Wraps a recorder so a persistence failure is logged instead of propagating.
+ *
+ * Telemetry is not the deliverable: a run that has already spent money on agent
+ * calls must be allowed to finish and return its results even if the database
+ * is momentarily unreachable.
+ */
+function protectRecorder(recorder: RunRecorder, logger: AppLogger): RunRecorder {
+  const guard = async (operation: string, action: () => Promise<void>): Promise<void> => {
+    try {
+      await action();
+    } catch (error) {
+      logger.error({ operation, error: toErrorMessage(error) }, 'run bookkeeping failed');
+    }
+  };
+
+  return {
+    recordExecution: (record) => guard('recordExecution', () => recorder.recordExecution(record)),
+    recordSources: (runId, sources) =>
+      guard('recordSources', () => recorder.recordSources(runId, sources)),
+    updateRun: (runId, data) => guard('updateRun', () => recorder.updateRun(runId, data)),
+  };
 }
