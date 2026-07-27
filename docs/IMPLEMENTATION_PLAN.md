@@ -39,7 +39,7 @@
 | Scoring engine | `packages/shared/src/scoring.ts`, `apps/api/src/scoring/engine.ts` |
 | PRD generator | `apps/api/src/agents/definitions/prd-generator.agent.ts` |
 | Prompt engineer | `apps/api/src/agents/definitions/prompt-engineer.agent.ts` |
-| Automated tests | 96 unit + 8 integration + 3 browser, all run in CI |
+| Automated tests | 99 unit + 8 integration + 3 browser, all run in CI |
 | README | `README.md` |
 | Architecture documentation | `docs/ARCHITECTURE.md` |
 | API documentation | `docs/API.md` and live OpenAPI at `/docs` |
