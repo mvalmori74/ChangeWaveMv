@@ -1,0 +1,668 @@
+// AI App Factory - data model.
+// Docs: docs/DATABASE.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums (mirrored in packages/shared/src/enums.ts)
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum Platform {
+  ANDROID
+  IOS
+  WEB
+  DESKTOP
+  CROSS_PLATFORM
+}
+
+enum ResearchProjectStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum ResearchRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum AgentExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  BUDGET_EXCEEDED
+}
+
+enum SourceType {
+  WEB
+  APP_STORE
+  REVIEW
+  REPORT
+  FORUM
+  NEWS
+  SOCIAL
+  INTERNAL
+  OTHER
+}
+
+enum EvidenceType {
+  VERIFIED
+  INFERENCE
+  ESTIMATE
+  HYPOTHESIS
+}
+
+enum ReviewInsightType {
+  PAIN_POINT
+  FEATURE_REQUEST
+  BUG
+  COMPLAINT
+  PRICING
+  UX
+  ADS
+  PRAISE
+}
+
+enum OpportunityStatus {
+  DISCOVERED
+  ANALYZING
+  SCORED
+  APPROVED
+  REJECTED
+  PRD_GENERATED
+  CODE_PROMPT_GENERATED
+  DEVELOPMENT
+  RELEASED
+  MONITORING
+  SCALED
+  KILLED
+}
+
+enum CodeGenerationStatus {
+  CREATED
+  PROMPT_READY
+  SENT_TO_CODEX
+  GENERATING
+  BUILDING
+  TESTING
+  FAILED
+  COMPLETED
+}
+
+enum PromptType {
+  CODEX_PROJECT
+  CODEX_FEATURE
+  QA_PLAN
+}
+
+enum DecisionType {
+  APPROVE
+  REJECT
+  KEEP
+  IMPROVE
+  SCALE
+  KILL
+}
+
+enum ActorType {
+  USER
+  AGENT
+  SYSTEM
+}
+
+enum AppStatus {
+  PLANNED
+  IN_DEVELOPMENT
+  IN_REVIEW
+  RELEASED
+  RETIRED
+}
+
+enum ModelTier {
+  FAST
+  BALANCED
+  DEEP
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(ANALYST)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  projects  ResearchProject[]
+  decisions Decision[]
+  prds      PRD[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Agent registry & execution
+// ---------------------------------------------------------------------------
+
+/// Registry row for an agent. Agents are data, not code branches: the
+/// orchestrator resolves the run order from `dependencies` at runtime.
+model Agent {
+  id           String    @id @default(cuid())
+  key          String    @unique
+  name         String
+  description  String
+  version      String
+  role         String
+  inputSchema  Json
+  outputSchema Json
+  systemPrompt String
+  tools        String[]  @default([])
+  dependencies String[]  @default([])
+  enabled      Boolean   @default(true)
+  priority     Int       @default(100)
+  modelTier    ModelTier @default(BALANCED)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  executions AgentExecution[]
+
+  @@map("agents")
+}
+
+model AgentExecution {
+  id       String  @id @default(cuid())
+  runId    String
+  agentKey String
+  agentId  String?
+
+  status           AgentExecutionStatus @default(PENDING)
+  input            Json
+  output           Json?
+  model            String?
+  promptTokens     Int                  @default(0)
+  completionTokens Int                  @default(0)
+  costUsd          Decimal              @default(0) @db.Decimal(12, 6)
+  durationMs       Int                  @default(0)
+  attempt          Int                  @default(1)
+  error            String?
+  startedAt        DateTime             @default(now())
+  finishedAt       DateTime?
+
+  run   ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agent Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@index([agentKey])
+  @@map("agent_executions")
+}
+
+// ---------------------------------------------------------------------------
+// Research
+// ---------------------------------------------------------------------------
+
+model ResearchProject {
+  id          String                @id @default(cuid())
+  name        String
+  sector      String
+  country     String
+  platform    Platform              @default(ANDROID)
+  language    String                @default("en")
+  timeframe   String                @default("last 12 months")
+  objective   String?
+  status      ResearchProjectStatus @default(DRAFT)
+  budgetUsd   Decimal               @default(5) @db.Decimal(10, 2)
+  tokenBudget Int                   @default(400000)
+  ownerId     String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runs          ResearchRun[]
+  opportunities Opportunity[]
+  markets       Market[]
+  competitors   Competitor[]
+  painPoints    PainPoint[]
+  reviews       ReviewInsight[]
+
+  @@index([ownerId])
+  @@map("research_projects")
+}
+
+model ResearchRun {
+  id           String            @id @default(cuid())
+  projectId    String
+  status       ResearchRunStatus @default(PENDING)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  error        String?
+  totalCostUsd Decimal           @default(0) @db.Decimal(12, 6)
+  totalTokens  Int               @default(0)
+  budgetUsd    Decimal           @db.Decimal(10, 2)
+  tokenBudget  Int
+  /// Blackboard: raw output of every agent, keyed by agent key.
+  state        Json              @default("{}")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  project       ResearchProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions    AgentExecution[]
+  sources       Source[]
+  claims        Claim[]
+  opportunities Opportunity[]
+
+  @@index([projectId])
+  @@map("research_runs")
+}
+
+// ---------------------------------------------------------------------------
+// Evidence
+// ---------------------------------------------------------------------------
+
+model Source {
+  id               String     @id @default(cuid())
+  runId            String?
+  url              String
+  title            String
+  publisher        String?
+  sourceType       SourceType @default(WEB)
+  accessedAt       DateTime   @default(now())
+  publishedAt      DateTime?
+  /// 0-1 heuristic trust weight applied to claims backed by this source.
+  credibilityScore Float      @default(0.5)
+  snippet          String?
+  createdAt        DateTime   @default(now())
+
+  run    ResearchRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
+  claims Claim[]      @relation("ClaimSources")
+
+  @@unique([runId, url])
+  @@index([runId])
+  @@map("sources")
+}
+
+/// A single statement produced by an agent, tagged with how it was obtained so
+/// the UI never shows a model guess next to a sourced fact without saying so.
+model Claim {
+  id           String       @id @default(cuid())
+  runId        String
+  agentKey     String
+  statement    String
+  evidenceType EvidenceType
+  confidence   Float        @default(0.5)
+  createdAt    DateTime     @default(now())
+
+  run     ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sources Source[]    @relation("ClaimSources")
+
+  @@index([runId])
+  @@map("claims")
+}
+
+// ---------------------------------------------------------------------------
+// Market intelligence
+// ---------------------------------------------------------------------------
+
+model Market {
+  id          String @id @default(cuid())
+  projectId   String
+  name        String
+  description String
+
+  /// EstimateRange: { low, high, unit, confidence, basis }
+  sizeEstimate    Json?
+  growthTrend     String?
+  seasonality     String?
+  targetUsers     Json     @default("[]")
+  demandLevel     String?
+  /// 0-100, higher means more saturated.
+  saturationScore Float?
+  keyProblems     Json     @default("[]")
+  createdAt       DateTime @default(now())
+
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  competitors Competitor[]
+
+  @@index([projectId])
+  @@map("markets")
+}
+
+model Competitor {
+  id            String       @id @default(cuid())
+  projectId     String
+  marketId      String?
+  name          String
+  description   String?
+  url           String?
+  businessModel String?
+  pricing       String?
+  rating        Float?
+  reviewCount   Int?
+  installsRange String?
+  platform      Platform?
+  strengths     String[]     @default([])
+  weaknesses    String[]     @default([])
+  features      String[]     @default([])
+  /// Direct vs indirect competitor.
+  isDirect      Boolean      @default(true)
+  evidenceType  EvidenceType @default(INFERENCE)
+  sourceUrls    String[]     @default([])
+  createdAt     DateTime     @default(now())
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  market  Market?         @relation(fields: [marketId], references: [id], onDelete: SetNull)
+  reviews ReviewInsight[]
+
+  @@index([projectId])
+  @@map("competitors")
+}
+
+model ReviewInsight {
+  id           String            @id @default(cuid())
+  projectId    String
+  competitorId String?
+  type         ReviewInsightType
+  summary      String
+  quote        String?
+  sentiment    Float?
+  /// How often the insight recurs across the reviewed corpus: LOW/MEDIUM/HIGH.
+  frequency    String?
+  evidenceType EvidenceType      @default(INFERENCE)
+  sourceUrls   String[]          @default([])
+  createdAt    DateTime          @default(now())
+
+  project    ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  competitor Competitor?     @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@map("review_insights")
+}
+
+model PainPoint {
+  id              String       @id @default(cuid())
+  projectId       String
+  problem         String
+  targetUser      String
+  frequency       String
+  severity        String
+  currentSolution String?
+  marketGap       String?
+  evidenceType    EvidenceType @default(INFERENCE)
+  confidence      Float        @default(0.5)
+  sourceUrls      String[]     @default([])
+  createdAt       DateTime     @default(now())
+
+  project       ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@index([projectId])
+  @@map("pain_points")
+}
+
+// ---------------------------------------------------------------------------
+// Opportunity
+// ---------------------------------------------------------------------------
+
+model Opportunity {
+  id               String  @id @default(cuid())
+  projectId        String
+  runId            String?
+  title            String
+  category         String
+  targetAudience   String
+  problem          String
+  proposedSolution String
+
+  marketScore       Float?
+  competitionScore  Float?
+  monetizationScore Float?
+  technicalScore    Float?
+  retentionScore    Float?
+  finalScore        Float?
+  confidenceScore   Float?
+  classification    String?
+
+  /// Monetization Agent output: recommended + alternative model, ARPU range.
+  monetization Json?
+  /// Technical Feasibility Agent output: complexity, effort, dependencies.
+  feasibility  Json?
+  mvpSummary   Json?
+  risks        Json         @default("[]")
+  assumptions  Json         @default("[]")
+  evidenceType EvidenceType @default(INFERENCE)
+
+  status    OpportunityStatus @default(DISCOVERED)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  project      ResearchProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run          ResearchRun?            @relation(fields: [runId], references: [id], onDelete: SetNull)
+  painPoints   PainPoint[]
+  scores       OpportunityScore[]
+  prds         PRD[]
+  prompts      Prompt[]
+  codeProjects CodeGenerationProject[]
+  apps         App[]
+  decisions    Decision[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([finalScore])
+  @@map("opportunities")
+}
+
+/// One row per scoring criterion, so the final score is always explainable.
+model OpportunityScore {
+  id             String   @id @default(cuid())
+  opportunityId  String
+  criterion      String
+  weight         Float
+  rawScore       Float
+  weightedScore  Float
+  rationale      String
+  evidence       String[] @default([])
+  confidence     Float    @default(0.5)
+  weightsVersion String   @default("v1")
+  createdAt      DateTime @default(now())
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, criterion, weightsVersion])
+  @@index([opportunityId])
+  @@map("opportunity_scores")
+}
+
+// ---------------------------------------------------------------------------
+// Delivery artefacts
+// ---------------------------------------------------------------------------
+
+model PRD {
+  id            String   @id @default(cuid())
+  opportunityId String
+  version       Int      @default(1)
+  title         String
+  /// Structured PRD document (all 23 sections).
+  content       Json
+  markdown      String
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opportunity  Opportunity             @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdBy    User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  prompts      Prompt[]
+  codeProjects CodeGenerationProject[]
+
+  @@unique([opportunityId, version])
+  @@index([opportunityId])
+  @@map("prds")
+}
+
+model Prompt {
+  id            String     @id @default(cuid())
+  opportunityId String
+  prdId         String?
+  type          PromptType @default(CODEX_PROJECT)
+  version       Int        @default(1)
+  /// Section name -> body, so the UI can render/copy a single section.
+  sections      Json
+  markdown      String
+  model         String?
+  tokenEstimate Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  opportunity  Opportunity             @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  prd          PRD?                    @relation(fields: [prdId], references: [id], onDelete: SetNull)
+  codeProjects CodeGenerationProject[]
+
+  @@unique([opportunityId, type, version])
+  @@index([opportunityId])
+  @@map("prompts")
+}
+
+model CodeGenerationProject {
+  id            String               @id @default(cuid())
+  opportunityId String
+  prdId         String?
+  promptId      String?
+  repository    String?
+  branch        String?
+  status        CodeGenerationStatus @default(CREATED)
+  prompt        String?
+  buildStatus   String?
+  testStatus    String?
+  externalRef   String?
+  generatedAt   DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  prd         PRD?        @relation(fields: [prdId], references: [id], onDelete: SetNull)
+  promptRef   Prompt?     @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  apps        App[]
+
+  @@index([opportunityId])
+  @@map("code_generation_projects")
+}
+
+// ---------------------------------------------------------------------------
+// Post launch
+// ---------------------------------------------------------------------------
+
+model App {
+  id               String    @id @default(cuid())
+  opportunityId    String
+  codeGenerationId String?
+  name             String
+  packageName      String?
+  platform         Platform  @default(ANDROID)
+  status           AppStatus @default(PLANNED)
+  storeUrl         String?
+  releasedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  opportunity    Opportunity            @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  codeGeneration CodeGenerationProject? @relation(fields: [codeGenerationId], references: [id], onDelete: SetNull)
+  metrics        AppMetric[]
+  decisions      Decision[]
+
+  @@index([opportunityId])
+  @@map("apps")
+}
+
+model AppMetric {
+  id            String   @id @default(cuid())
+  appId         String
+  date          DateTime
+  installs      Int      @default(0)
+  dau           Int      @default(0)
+  mau           Int      @default(0)
+  retentionD1   Float?
+  retentionD7   Float?
+  retentionD30  Float?
+  revenueUsd    Decimal  @default(0) @db.Decimal(12, 2)
+  adRevenueUsd  Decimal  @default(0) @db.Decimal(12, 2)
+  iapRevenueUsd Decimal  @default(0) @db.Decimal(12, 2)
+  costUsd       Decimal  @default(0) @db.Decimal(12, 2)
+  rating        Float?
+  crashRate     Float?
+  createdAt     DateTime @default(now())
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, date])
+  @@index([appId])
+  @@map("app_metrics")
+}
+
+/// Human-in-the-loop record. The AI recommendation and the human decision are
+/// stored side by side and are never collapsed into one field.
+model Decision {
+  id            String       @id @default(cuid())
+  opportunityId String?
+  appId         String?
+  type          DecisionType
+
+  aiRecommendation String?
+  aiRationale      String?
+  aiConfidence     Float?
+
+  humanDecision  String?
+  humanRationale String?
+  decidedById    String?
+  decidedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  app         App?         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  decidedBy   User?        @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([opportunityId])
+  @@map("decisions")
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorId    String?
+  actorType  ActorType @default(USER)
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

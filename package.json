@@ -1,21 +1,31 @@
 {
-  "name": "library-rest-api",
+  "name": "ai-app-factory",
   "version": "1.0.0",
-  "description": "REST API per gestire una libreria con libri e autori",
-  "main": "src/app.js",
-  "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+  "private": true,
+  "description": "AI App Factory - multi-agent platform for discovering, scoring and specifying app opportunities",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
   },
-  "keywords": ["library", "books", "authors", "rest-api"],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "uuid": "^9.0.0"
+  "scripts": {
+    "build": "npm run build --workspace @aiaf/shared && npm run build --workspace @aiaf/api && npm run build --workspace @aiaf/web",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev --workspace @aiaf/api\" \"npm run dev --workspace @aiaf/web\"",
+    "dev:api": "npm run dev --workspace @aiaf/api",
+    "dev:web": "npm run dev --workspace @aiaf/web",
+    "test": "npm run test --workspace @aiaf/shared && npm run test --workspace @aiaf/api",
+    "test:e2e": "npm run test:e2e --workspace @aiaf/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace @aiaf/api",
+    "db:generate": "npm run db:generate --workspace @aiaf/api",
+    "db:seed": "npm run db:seed --workspace @aiaf/api",
+    "db:reset": "npm run db:reset --workspace @aiaf/api"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
   }
 }
