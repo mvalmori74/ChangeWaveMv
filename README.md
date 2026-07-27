@@ -38,7 +38,7 @@ create a research project, and press **Start research run**.
 ### Without Docker
 
 ```bash
-npm install
+npm install                  # also generates the Prisma client and builds @aiaf/shared
 cp .env.example .env         # point DATABASE_URL at a local PostgreSQL 16
 npm run db:migrate           # apply migrations
 npm run db:seed              # optional: an admin account and a demo project

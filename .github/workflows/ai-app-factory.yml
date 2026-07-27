@@ -65,11 +65,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      # Il postinstall genera il client Prisma e compila @aiaf/shared: senza
+      # quei due artefatti nemmeno il controllo dei tipi può partire.
       - name: Installa le dipendenze
         run: npm ci
-
-      - name: Client Prisma
-        run: npx prisma generate --schema apps/api/prisma/schema.prisma
 
       - name: Controllo dei tipi
         run: npm run typecheck

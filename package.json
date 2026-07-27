@@ -11,6 +11,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "postinstall": "node scripts/prepare.mjs",
     "build": "npm run build --workspace @aiaf/shared && npm run build --workspace @aiaf/api && npm run build --workspace @aiaf/web",
     "dev": "concurrently -n api,web -c blue,magenta \"npm run dev --workspace @aiaf/api\" \"npm run dev --workspace @aiaf/web\"",
     "dev:api": "npm run dev --workspace @aiaf/api",
