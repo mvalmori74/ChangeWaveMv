@@ -54,6 +54,13 @@ npm run typecheck            # strict type check across all workspaces
 npm run test:e2e             # Playwright smoke tests against a running stack
 ```
 
+`npm test` needs no database, Redis or network. The HTTP integration suite runs
+only when you point it at a disposable, migrated database:
+
+```bash
+DATABASE_TEST_URL=postgresql://aiaf:aiaf@localhost:5432/aiaf_test npm test
+```
+
 ### Running with no API key
 
 The default configuration (`LLM_PROVIDER=mock`, `SEARCH_PROVIDER=mock`) runs the

@@ -11,10 +11,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:reset": "prisma migrate reset --force",
+    "db:generate": "node ../../scripts/with-env.mjs npx prisma generate",
+    "db:migrate": "node ../../scripts/with-env.mjs npx prisma migrate deploy",
+    "db:migrate:dev": "node ../../scripts/with-env.mjs npx prisma migrate dev",
+    "db:reset": "node ../../scripts/with-env.mjs npx prisma migrate reset --force",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {
