@@ -1,0 +1,244 @@
+name: AI App Factory
+
+# Compila e verifica la piattaforma su GitHub, dove la rete raggiunge Docker Hub
+# e i browser di Playwright. Pubblica fra gli artefatti della run il bundle del
+# frontend e le immagini Docker: si scaricano dalla pagina del workflow.
+on:
+  push:
+    branches:
+      - claude/ai-app-factory-platform-obd96g
+    paths:
+      - apps/**
+      - packages/**
+      - scripts/**
+      - prisma/**
+      - package.json
+      - package-lock.json
+      - tsconfig.base.json
+      - docker-compose.yml
+      - .github/workflows/ai-app-factory.yml
+  pull_request:
+    branches:
+      - claude/library-rest-api-011CUpyg9vFyQBkssNgfHqvZ
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verifica:
+    name: Tipi, build e test
+    runs-on: ubuntu-latest
+
+    # La suite di integrazione gira contro un PostgreSQL vero, non un mock.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aiaf
+          POSTGRES_PASSWORD: aiaf
+          POSTGRES_DB: aiaf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aiaf -d aiaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://aiaf:aiaf@localhost:5432/aiaf?schema=public
+      JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      LLM_PROVIDER: mock
+      SEARCH_PROVIDER: mock
+      LOG_LEVEL: warn
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installa le dipendenze
+        run: npm ci
+
+      - name: Client Prisma
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      - name: Controllo dei tipi
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test unitari
+        run: npm test
+
+      - name: Migrazioni
+        run: npm run db:migrate
+
+      - name: Utente e progetto di esempio
+        run: npm run db:seed
+
+      # Rigira la suite con il database collegato: gli 8 test di integrazione
+      # sono saltati finché DATABASE_TEST_URL non è impostata.
+      - name: Test di integrazione
+        working-directory: apps/api
+        env:
+          DATABASE_TEST_URL: postgresql://aiaf:aiaf@localhost:5432/aiaf?schema=public
+        run: npx vitest run
+
+      - name: Browser per Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Avvia l'API
+        run: |
+          nohup npm run dev:api > "$RUNNER_TEMP/api.log" 2>&1 &
+          disown
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/health > /dev/null; then
+              echo "API pronta"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "L'API non è partita:"
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+
+      # Playwright avvia da sé il frontend (vite) tramite il suo webServer.
+      - name: Test end-to-end
+        run: npm run test:e2e
+
+      - name: Log dell'API in caso di errore
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log" || true
+
+      - name: Report di Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-playwright
+          path: apps/web/playwright-report
+          if-no-files-found: ignore
+
+      - name: Pubblica il bundle del frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+
+  immagini:
+    name: Immagini Docker e stack completo
+    runs-on: ubuntu-latest
+    needs: verifica
+
+    env:
+      JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Immagine dell'API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          tags: aiaf-api:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Immagine del frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          tags: aiaf-web:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Verifica che `docker compose up` porti davvero su lo stack: migrazioni
+      # applicate all'avvio, API sana, frontend servito.
+      - name: Avvia lo stack
+        run: docker compose up -d --no-build --wait --wait-timeout 180
+        env:
+          LLM_PROVIDER: mock
+          SEARCH_PROVIDER: mock
+
+      - name: Controlla API e frontend
+        run: |
+          curl -fsS http://localhost:3000/health | tee /dev/stderr | grep -q '"status":"ok"'
+          curl -fsS http://localhost:3000/health/ready | grep -q '"status":"ready"'
+          curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:8080 | grep -q 200
+
+      - name: Registrazione e giro completo di ricerca
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -fsS -X POST http://localhost:3000/api/auth/register \
+            -H 'content-type: application/json' \
+            -d '{"name":"CI","email":"ci@example.com","password":"password123"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+
+          PROJECT=$(curl -fsS -X POST http://localhost:3000/api/research/projects \
+            -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+            -d '{"name":"CI","sector":"industrial maintenance","country":"Italy","platform":"ANDROID"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+
+          RUN=$(curl -fsS -X POST "http://localhost:3000/api/research/projects/$PROJECT/runs" \
+            -H "authorization: Bearer $TOKEN" \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS "http://localhost:3000/api/research/runs/$RUN" \
+              -H "authorization: Bearer $TOKEN" \
+              | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+            echo "run: $STATUS"
+            case "$STATUS" in
+              COMPLETED) break ;;
+              FAILED|CANCELLED) echo "La run è fallita"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          [ "$STATUS" = "COMPLETED" ] || { echo "Timeout della run"; exit 1; }
+
+          TOTAL=$(curl -fsS "http://localhost:3000/api/opportunities?projectId=$PROJECT" \
+            -H "authorization: Bearer $TOKEN" \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["total"])')
+          echo "opportunità prodotte: $TOTAL"
+          [ "$TOTAL" -gt 0 ] || { echo "Nessuna opportunità prodotta"; exit 1; }
+
+      - name: Log dello stack in caso di errore
+        if: failure()
+        run: docker compose logs --tail 200
+
+      - name: Ferma lo stack
+        if: always()
+        run: docker compose down -v
+
+      - name: Esporta le immagini
+        run: |
+          docker save aiaf-api:latest | gzip > aiaf-api.tar.gz
+          docker save aiaf-web:latest | gzip > aiaf-web.tar.gz
+
+      - name: Pubblica le immagini
+        uses: actions/upload-artifact@v4
+        with:
+          name: immagini-docker
+          path: |
+            aiaf-api.tar.gz
+            aiaf-web.tar.gz
+          if-no-files-found: error
+          retention-days: 7

@@ -31,6 +31,9 @@ services:
       retries: 10
 
   api:
+    # Nome esplicito: la CI costruisce l'immagine a parte e poi avvia lo stack
+    # con --no-build, quindi il tag deve combaciare.
+    image: ${API_IMAGE:-aiaf-api:latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -67,6 +70,7 @@ services:
     restart: unless-stopped
 
   web:
+    image: ${WEB_IMAGE:-aiaf-web:latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
