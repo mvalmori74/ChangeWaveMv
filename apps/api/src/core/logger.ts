@@ -18,6 +18,7 @@ export function createLogger(level: string): AppLogger {
         'apiKey',
         '*.apiKey',
         'OPENAI_API_KEY',
+        'ANTHROPIC_API_KEY',
         'TAVILY_API_KEY',
         'JWT_SECRET',
       ],

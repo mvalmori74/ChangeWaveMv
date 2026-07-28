@@ -16,6 +16,16 @@ export interface LlmCompletionRequest {
   messages: LlmMessage[];
   /** Concrete model id. Resolved from a tier by the ModelRouter. */
   model: string;
+  /**
+   * The task tier the caller asked for, passed through alongside the resolved
+   * model. Providers that can vary reasoning depth independently of the model
+   * (Anthropic's `effort`) use it; providers that cannot ignore it.
+   */
+  tier?: ModelTier;
+  /**
+   * Ignored by providers whose current models reject sampling parameters —
+   * see AnthropicProvider.
+   */
   temperature?: number;
   maxTokens?: number;
   /**

@@ -8,6 +8,7 @@ import { getPrismaClient } from '../db/prisma.js';
 import { PrismaRunRecorder } from '../persistence/run-recorder.js';
 import { ExportCodeGenerationProvider } from '../providers/codegen/export.provider.js';
 import type { CodeGenerationProvider } from '../providers/codegen/types.js';
+import { AnthropicProvider } from '../providers/llm/anthropic.provider.js';
 import { ConfigModelRouter } from '../providers/llm/model-router.js';
 import { MockLlmProvider } from '../providers/llm/mock.provider.js';
 import { OpenAiProvider } from '../providers/llm/openai.provider.js';
@@ -63,6 +64,33 @@ export interface ContainerOverrides {
 }
 
 /**
+ * The one place that knows which LLM vendor is in play. `loadConfig` has
+ * already refused any combination without the matching API key, so the
+ * non-null assertions here cannot fire at runtime.
+ */
+export function createLlmProvider(config: AppConfig): LlmProvider {
+  switch (config.LLM_PROVIDER) {
+    case 'openai':
+      return new OpenAiProvider({
+        apiKey: config.OPENAI_API_KEY as string,
+        ...(config.OPENAI_BASE_URL ? { baseURL: config.OPENAI_BASE_URL } : {}),
+        maxRetries: config.LLM_MAX_RETRIES,
+      });
+    case 'anthropic':
+      return new AnthropicProvider({
+        apiKey: config.ANTHROPIC_API_KEY as string,
+        ...(config.ANTHROPIC_BASE_URL ? { baseURL: config.ANTHROPIC_BASE_URL } : {}),
+        maxRetries: config.LLM_MAX_RETRIES,
+        maxTokens: config.LLM_MAX_TOKENS,
+        serverSideFallbacks: config.ANTHROPIC_FALLBACKS,
+        promptCaching: config.ANTHROPIC_PROMPT_CACHE,
+      });
+    default:
+      return new MockLlmProvider();
+  }
+}
+
+/**
  * Composition root. Every dependency is constructed here and injected
  * downwards, so nothing below this file reaches for a global or decides which
  * provider it is talking to.
@@ -74,15 +102,7 @@ export function createContainer(
   const logger = overrides.logger ?? createLogger(config.LOG_LEVEL);
   const prisma = overrides.prisma ?? getPrismaClient(config.DATABASE_URL);
 
-  const llm =
-    overrides.llm ??
-    (config.LLM_PROVIDER === 'openai'
-      ? new OpenAiProvider({
-          apiKey: config.OPENAI_API_KEY as string,
-          ...(config.OPENAI_BASE_URL ? { baseURL: config.OPENAI_BASE_URL } : {}),
-          maxRetries: config.LLM_MAX_RETRIES,
-        })
-      : new MockLlmProvider());
+  const llm = overrides.llm ?? createLlmProvider(config);
 
   const search =
     overrides.search ??

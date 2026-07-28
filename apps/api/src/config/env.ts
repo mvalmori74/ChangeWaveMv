@@ -12,6 +12,18 @@ const optional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
 
 /**
+ * An on/off setting. `z.coerce.boolean()` is not usable here: it applies
+ * JavaScript truthiness, so the string `'false'` would switch the flag *on*.
+ */
+const flag = (fallback: boolean) =>
+  z.preprocess(
+    (value) => (value === '' || value === undefined ? fallback : value),
+    z.union([z.boolean(), z.enum(['true', 'false', '1', '0'])]).transform((value) =>
+      typeof value === 'boolean' ? value : value === 'true' || value === '1',
+    ),
+  );
+
+/**
  * Configuration is validated once at boot. A missing or malformed variable
  * fails the process immediately rather than surfacing as a confusing runtime
  * error halfway through a research run.
@@ -34,13 +46,30 @@ const envSchema = z.object({
 
   REDIS_URL: optional(z.string().min(1)),
 
-  LLM_PROVIDER: z.enum(['openai', 'mock']).default('mock'),
+  LLM_PROVIDER: z.enum(['openai', 'anthropic', 'mock']).default('mock'),
   OPENAI_API_KEY: optional(z.string().min(1)),
   OPENAI_BASE_URL: optional(z.string().url()),
-  LLM_MODEL_FAST: z.string().default('gpt-4o-mini'),
-  LLM_MODEL_BALANCED: z.string().default('gpt-4o'),
-  LLM_MODEL_DEEP: z.string().default('gpt-4o'),
+  ANTHROPIC_API_KEY: optional(z.string().min(1)),
+  ANTHROPIC_BASE_URL: optional(z.string().url()),
+  /**
+   * Cache the agent system prompts. Off by default: a cache write costs a
+   * premium over ordinary input tokens, so it only pays off when the same
+   * project is researched repeatedly within the cache TTL.
+   */
+  ANTHROPIC_PROMPT_CACHE: flag(false),
+  /** Let Anthropic re-run a declined request on its recommended fallback model. */
+  ANTHROPIC_FALLBACKS: flag(true),
+  /**
+   * Model ids per task tier. Left unset they resolve to the defaults of the
+   * active provider (`providers/llm/model-router.ts`), so switching
+   * LLM_PROVIDER does not require rewriting three variables.
+   */
+  LLM_MODEL_FAST: optional(z.string().min(1)),
+  LLM_MODEL_BALANCED: optional(z.string().min(1)),
+  LLM_MODEL_DEEP: optional(z.string().min(1)),
   LLM_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  /** Upper bound on a single completion. On Claude this caps thinking too. */
+  LLM_MAX_TOKENS: z.coerce.number().int().min(1024).max(200_000).default(16_000),
 
   SEARCH_PROVIDER: z.enum(['tavily', 'mock']).default('mock'),
   TAVILY_API_KEY: optional(z.string().min(1)),
@@ -72,6 +101,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   // Fail fast on combinations that would only break once an agent runs.
   if (config.LLM_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
     throw new Error('LLM_PROVIDER=openai requires OPENAI_API_KEY to be set');
+  }
+  if (config.LLM_PROVIDER === 'anthropic' && !config.ANTHROPIC_API_KEY) {
+    throw new Error('LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY to be set');
   }
   if (config.SEARCH_PROVIDER === 'tavily' && !config.TAVILY_API_KEY) {
     throw new Error('SEARCH_PROVIDER=tavily requires TAVILY_API_KEY to be set');

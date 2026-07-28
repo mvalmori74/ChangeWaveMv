@@ -68,14 +68,55 @@ entire pipeline offline. That mode exists so the platform can be installed,
 tested and demonstrated without spending anything — **its output is synthetic**.
 Every offline record is tagged `HYPOTHESIS`, carries a
 `[synthetic offline placeholder - not researched]` marker, and `GET /health`
-reports `"synthetic": true`. To do real research:
+reports `"synthetic": true`. To do real research, pick an LLM vendor and a
+search vendor:
 
 ```env
+# either
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-…
+
+# or
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-…
+
 SEARCH_PROVIDER=tavily
 TAVILY_API_KEY=tvly-…
 ```
+
+### Choosing between OpenAI and Claude
+
+Both are first-class: the agents, prompts, schemas and scoring are identical,
+so the same research brief can be run through either and the results compared.
+Nothing but `.env` changes.
+
+`LLM_MODEL_FAST` / `_BALANCED` / `_DEEP` map the three task tiers agents declare
+onto model ids. Left empty they resolve to the active provider's defaults
+(`apps/api/src/providers/llm/model-router.ts`):
+
+| Tier | `openai` | `anthropic` |
+|---|---|---|
+| `FAST` — mechanical extraction | `gpt-4o-mini` | `claude-haiku-4-5` |
+| `BALANCED` — research and analysis | `gpt-4o` | `claude-sonnet-5` |
+| `DEEP` — synthesis, scoring, PRD | `gpt-4o` | `claude-opus-5` |
+
+Two behaviours are specific to the Claude backend:
+
+- **Reasoning effort follows the tier**, not just the model, so a `DEEP` agent
+  thinks harder than a `FAST` one even on the same model.
+- **`ANTHROPIC_PROMPT_CACHE`** (default off) caches the agent system prompts. A
+  cache write costs more than ordinary input tokens and a read costs a fraction,
+  so it pays off when you re-research the same project inside the cache lifetime
+  and costs slightly more when you do not. Cached tokens are priced correctly
+  either way, so the run budget stays accurate.
+- **`ANTHROPIC_FALLBACKS`** (default on) lets a request that safety classifiers
+  decline be re-run server-side on a recommended model instead of failing the
+  agent. Turn it off to see the refusal itself; the error then names the policy
+  category and Anthropic's explanation.
+
+Cost estimates come from a static table (`providers/llm/pricing.ts`) and are used
+for budget enforcement, not billing. An unknown model id is priced
+pessimistically, never free.
 
 ## Continuous integration
 

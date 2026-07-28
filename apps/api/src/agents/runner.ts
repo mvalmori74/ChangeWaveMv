@@ -93,6 +93,10 @@ export class AgentRunner {
       const response = await this.llm.complete({
         messages,
         model,
+        // Passed alongside the resolved model so a provider that can vary
+        // reasoning depth on its own (Anthropic's `effort`) sees the agent's
+        // intent, not just the model id it was mapped to.
+        tier: definition.modelTier,
         temperature: 0.2,
         jsonSchema,
         signal: context.signal,

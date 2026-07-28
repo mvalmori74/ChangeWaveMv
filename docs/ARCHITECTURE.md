@@ -24,7 +24,9 @@
 │                                                        ▼             │
 │  ┌──────────────┐  ┌───────────────┐  ┌──────────────────────────┐   │
 │  │ LlmProvider  │  │ SearchProvider│  │ CodeGenerationProvider   │   │
-│  │ openai│mock  │  │ tavily│mock   │  │ export                   │   │
+│  │ openai       │  │ tavily│mock   │  │ export                   │   │
+│  │ anthropic    │  │               │  │                          │   │
+│  │ mock         │  │               │  │                          │   │
 │  └──────────────┘  └───────────────┘  └──────────────────────────┘   │
 │                                                                      │
 │  Scoring Engine · Export renderers · Audit trail · Job queue          │
@@ -105,6 +107,21 @@ implementation and an offline one. The offline search provider returns **no
 results at all** rather than plausible fake URLs: a fabricated citation is worse
 than a missing one, because the whole point of the evidence layer is that a URL
 in the UI can be opened and checked.
+
+`LlmProvider` has two real backends, OpenAI and Anthropic, selected by
+`LLM_PROVIDER`. Adding the second one touched no agent, no prompt and no schema:
+one file implementing the interface, one branch in the composition root, and
+per-provider default model ids in `ConfigModelRouter`. Vendor differences stay
+inside the provider — Anthropic takes the system prompt as a top-level field
+rather than a message, rejects sampling parameters on current models, reports
+cached tokens separately (priced separately, so the run budget stays accurate),
+and can decline a request with a `refusal` stop reason, which the provider turns
+into a typed `ProviderError` naming the policy category instead of letting an
+empty body surface as a JSON parse failure two layers up.
+
+The only capability the interface grew for it is `tier`: the task tier travels
+alongside the resolved model id, so a provider that can vary reasoning depth
+independently of the model can use it, and one that cannot ignores it.
 
 ### Cost control is enforced, not advisory
 

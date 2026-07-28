@@ -22,6 +22,7 @@
 | 16 | Tests: unit, integration, browser | Done |
 | 17 | Docker and Docker Compose | Done — built and exercised in CI |
 | 18 | Continuous integration | Done — `.github/workflows/ai-app-factory.yml` |
+| 19 | Second LLM backend (Anthropic) | Done — selectable with `LLM_PROVIDER` |
 
 ## V1 acceptance checklist
 
@@ -39,7 +40,7 @@
 | Scoring engine | `packages/shared/src/scoring.ts`, `apps/api/src/scoring/engine.ts` |
 | PRD generator | `apps/api/src/agents/definitions/prd-generator.agent.ts` |
 | Prompt engineer | `apps/api/src/agents/definitions/prompt-engineer.agent.ts` |
-| Automated tests | 99 unit + 8 integration + 3 browser, all run in CI |
+| Automated tests | 125 unit + 8 integration + 3 browser, all run in CI |
 | README | `README.md` |
 | Architecture documentation | `docs/ARCHITECTURE.md` |
 | API documentation | `docs/API.md` and live OpenAPI at `/docs` |
@@ -85,6 +86,11 @@
 
 - The in-process queue is not durable. Without `REDIS_URL`, a restart mid-run
   leaves the run `PENDING`; it is visible in the UI and can be re-run.
+- The Anthropic backend is covered by unit tests against an injected fake
+  client, which pin the request shape, the refusal and truncation paths and the
+  cache-aware cost. It has **not** been run against the live API — that needs a
+  key. The OpenAI path has the same gap for the same reason; CI exercises the
+  full pipeline on the offline provider.
 - Cost figures are estimates from a static price table (`providers/llm/pricing.ts`),
   fine for budget enforcement, not for billing. Unknown models are priced
   pessimistically so they can never look free.
