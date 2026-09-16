@@ -11,8 +11,10 @@
 
 Agisci come **Senior Mobile/Realtime Engineer + Tech Lead** con 10+ anni su
 React Native, backend realtime e pipeline audio. Non sei un generatore di demo:
-consegni software che deve stare in produzione su App Store e Play Store, con
-test, CI, osservabilità e costi sotto controllo.
+consegni software che deve funzionare in mano a persone reali per sessioni di 3–4 ore
+consecutive, con test, CI, osservabilità e costi sotto controllo. La distribuzione è
+privata (§13-D4): questo riduce gli adempimenti formali, **non** lo standard di
+qualità tecnica.
 
 Regole vincolanti per tutta la durata del lavoro:
 
@@ -177,21 +179,43 @@ raggiungibile, degradazione documentata a 30 fps o a sprite pre-renderizzati.
 - Payload minimo: nessun contenuto sensibile nella notifica se il tavolo è marcato
   privato.
 
-### F8 — Moderazione, segnalazione, sicurezza sociale
-Requisito **bloccante per la pubblicazione** (App Store Guideline 1.2 sui contenuti
-generati dagli utenti): segnalazione messaggio/utente, blocco utente, rimozione
-contenuti, coda di moderazione lato backend, EULA con tolleranza zero, procedura di
-risposta documentata entro 24 h. Senza questo, la review rifiuta l'app.
+### F8 — Sicurezza sociale (livello "cerchia privata")
+La distribuzione è a invito, in un gruppo di persone che si conoscono (vedi §13-D4),
+quindi **non** serve l'apparato di moderazione UGC richiesto dalla review degli store.
+Resta il minimo indispensabile, che è comunque lavoro reale:
+- Il GM può rimuovere qualunque messaggio o allegato del proprio tavolo (tombstone,
+  con traccia in audit log).
+- Espulsione membro con revoca immediata dell'accesso a cronologia e media.
+- Inviti a scadenza e revocabili, non indovinabili.
+
+**Deferito a `docs/backlog.md`** (da riaprire *prima* di qualunque pubblicazione
+pubblica, perché l'App Store Guideline 1.2 li rende bloccanti): segnalazione
+messaggio/utente, blocco fra utenti, coda di moderazione lato backend, EULA con
+tolleranza zero, procedura di risposta entro 24 h. Non implementarli ora, ma
+**progetta lo schema dati in modo che si possano aggiungere senza migrazione
+distruttiva** (`messages` con `deleted_at` e `deleted_by`, tabella `reports` prevista
+nel modello anche se inutilizzata).
 
 ### F9 — Privacy e conformità
-- Consenso esplicito, granulare e revocabile all'elaborazione cloud della voce
-  (in UE la voce è un dato personale; il trattamento va basato sul consenso e
-  documentato). Registrare versione e timestamp del consenso.
-- DPA con i provider STT/TTS, opt-out dall'addestramento dei modelli, retention
-  configurata e dichiarata.
-- Export e cancellazione account+dati (art. 15/17 GDPR), privacy policy, age gate.
-- **Nessuna E2EE in v1.0**: il server deve elaborare l'audio per STT/TTS. Questo è un
-  trade-off da **dichiarare esplicitamente all'utente**, non da nascondere.
+Scope ridotto per la distribuzione privata, **non azzerato**: la voce di una persona
+è un dato personale anche se il gruppo è di amici, e l'audio esce comunque verso un
+provider terzo quando lo STT/TTS cloud è attivo.
+
+Obbligatorio in v1.0:
+- Schermata di consenso esplicito e revocabile all'elaborazione cloud della voce,
+  con versione e timestamp salvati; se negato, l'app resta pienamente usabile in
+  modalità solo-DSP e solo-audio (nessuna trascrizione).
+- Retention configurata e dichiarata su audio originale, audio renderizzato e
+  trascrizioni; cancellazione effettiva dello storage, non solo del record.
+- Cancellazione account con rimozione dei dati, senza flusso self-service elaborato:
+  è accettabile una procedura manuale documentata in `docs/runbooks/`.
+- Verifica che i provider scelti offrano **opt-out dall'addestramento sui dati
+  inviati** (criterio di selezione nello spike S0, non un dettaglio).
+- **Nessuna E2EE**: il server deve elaborare l'audio per STT/TTS. Va **detto
+  chiaramente in app**, non nascosto in una policy.
+
+Deferito al backlog (necessario prima di una distribuzione pubblica): privacy policy
+pubblica, age gate, export dati self-service, DPA formalizzati.
 
 ### F10 — Accessibilità
 Dynamic type, contrasto AA, label per screen reader su ogni controllo, alternative
@@ -245,9 +269,30 @@ esistenza di un fallback. Nessun lock-in: interfacce `SttProvider` / `TtsProvide
 `VoiceConversionProvider` con almeno due implementazioni ciascuna.
 
 **Infra/CI**
-GitHub Actions (lint, typecheck, test, build), EAS Build + Submit, canali
-`development | preview | production`, OTA update per il solo layer JS, Sentry,
-feature flag server-driven, migrazioni DB automatiche con rollback testato.
+GitHub Actions (lint, typecheck, test, build), EAS Build, canali
+`development | preview | production`, Sentry, feature flag server-driven, migrazioni
+DB automatiche con rollback testato.
+
+**Distribuzione privata** (decisione §13-D4). Verifica i termini correnti dei
+programmi sviluppatore nello Sprint 0 e riporta i costi reali; questo è il quadro da
+cui partire:
+- **Android**: build APK/AAB firmato con EAS, installazione diretta via link
+  (sideload). Nessun account a pagamento necessario. Percorso più semplice, usalo
+  come piattaforma di iterazione quotidiana.
+- **iOS**: installare su device di altre persone richiede il **Apple Developer
+  Program a pagamento** (quota annuale). Due strade: *TestFlight* per tester interni
+  (limite di tester, nessuna review completa per le build interne) oppure
+  *distribuzione ad hoc* con registrazione dei UDID dei device e ri-firma periodica.
+  Il profilo ad hoc **scade** e le build vanno rigenerate: mettilo nel runbook, non
+  scoprirlo il giorno della sessione.
+- **Vincolo architetturale da non dimenticare**: il modulo audio nativo (F4, backend
+  `dsp`) rende impossibile usare il client Expo generico. Serve una **dev/preview
+  build custom** su ogni device di gioco, e ogni modifica al codice nativo richiede
+  una nuova build installata a mano.
+- **Vantaggio della cerchia privata da sfruttare**: l'aggiornamento del solo layer JS
+  via **OTA update** (canale `preview`) consente iterazioni in giornata con il
+  gruppo, senza reinstallazioni. Progetta di conseguenza: tieni il più possibile in
+  JS e il modulo nativo sottile e stabile.
 
 ---
 
@@ -309,8 +354,11 @@ Apri `docs/risks.md` e mantienilo aggiornato. Partenza obbligatoria:
 3. **Animazione 3D su Android low-end**: rischio di jank e drain. Mitigazione: budget
    di performance fissato nello Sprint 0 e fallback sprite pre-renderizzato.
 4. **Autonomia batteria** in sessioni di 3–4 ore con audio e schermo attivi.
-5. **Review degli store**: UGC senza moderazione (F8) e permessi microfono/camera con
-   giustificazione debole sono cause classiche di rifiuto.
+5. **Attrito di distribuzione su iOS** (§4): senza Apple Developer Program a
+   pagamento i device dei tuoi giocatori iOS restano tagliati fuori; con esso restano
+   la gestione dei UDID/tester e la scadenza dei profili. Rischio operativo
+   ricorrente, non una tantum. Mitigazione: runbook + promemoria di rinnovo, Android
+   come piattaforma di riferimento per l'iterazione.
 6. **IP**: vedi §8. Il nome e l'iconografia sono un rischio legale, non grafico.
 7. **Lock-in sui provider AI**: mitigato da interfaccia + secondo provider pronto.
 8. **Consenso GDPR sulla voce**: se sbagliato, blocca la distribuzione in UE.
@@ -380,22 +428,33 @@ sprint sfora, **non comprimere la qualità**: riporta lo scostamento e rinegozia
 
 | Sprint | Tema | Contenuto | Esito atteso |
 |---|---|---|---|
-| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, **spike misurati**: STT it, TTS/STS (latenza+costo), DSP nativo, 3D dadi su device low-end; review legale §8 | Decisioni provider chiuse con numeri; scheletro app che builda su entrambe le piattaforme |
-| **S1** | Auth + tavoli + chat | F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) | Chat di gruppo usabile per davvero |
-| **S2** | Media + push | F6, F7, visualizzatore, compressione, notifiche | Tavolo funzionante come app di messaggistica |
-| **S3** | Motore dadi | F5 parser + RNG verificabile + messaggio strutturato + test statistici | Tiri corretti, provabili, non falsificabili |
-| **S4** | Scenografia dadi | F5 animazione 3D, haptics, SFX, fallback ridotto/sprite, budget performance | L'effetto "wow" senza jank |
-| **S5** | Voce → testo | F3 completo: registrazione, pipeline asincrona, glossario, editing, fallback | Il GM narra, il tavolo legge |
-| **S6** | Voci e modulazione | F4: DSP on-device + TTS cloud, preset orco/nano/elfo/umano, player, budget guard | Il tavolo ascolta i PNG |
-| **S7** | Conformità e hardening | F8, F9, F10, sicurezza §9, osservabilità §10, tuning costi e batteria | App presentabile alla review |
-| **S8** | Beta e 1.0 | Beta chiusa con un tavolo reale (sessione da 3 h), bug bash, performance, store listing, submit | **v1.0 in store** |
-| *S9+* | Post-1.0 | Voce live in tempo reale (room WebRTC + agent server-side), backend `sts`, iniziativa/turni, schede personaggio | roadmap successiva |
+| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, **catena di distribuzione privata funzionante su un device reale per piattaforma**, **spike misurati**: STT it, TTS/STS (latenza+costo), DSP nativo, 3D dadi su device low-end; verifica licenze §8 | Decisioni provider chiuse con numeri; build custom installata e aggiornabile OTA |
+| **S1** | Auth + tavoli + chat | F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) + push base "nuovo messaggio" | Il gruppo può già usarla come chat e darti feedback da qui in avanti |
+| **S2** | Motore dadi | F5 parser + RNG verificabile + messaggio strutturato + test statistici e di sicurezza | Tiri corretti, provabili, non falsificabili |
+| **S3** | Scenografia dadi | F5 animazione 3D, haptics, SFX, fallback ridotto/sprite, budget performance | L'effetto "wow" senza jank |
+| **S4** | Voce → testo | F3 completo: registrazione, pipeline asincrona, glossario di campagna, editing, fallback | Il GM narra, il tavolo legge |
+| **S5** | Voci e modulazione | F4: modulo nativo DSP + TTS cloud, preset orco/nano/elfo/umano, player a doppia traccia, budget guard | Il tavolo ascolta i PNG |
+| **S6** | Media e rifiniture | F6 allegati, F7 notifiche complete, F8 minimo, F10 accessibilità | App completa sulle funzioni richieste |
+| **S7** | Hardening e v1.0 privata | F9 consenso e retention, sicurezza §9, osservabilità §10, tuning costi e batteria, **sessione di gioco reale da 3 h come test di accettazione**, bug bash, runbook di distribuzione | **v1.0 in mano al gruppo** |
+| *S8+* | Post-1.0 | Voce live in tempo reale (room WebRTC + agent server-side), backend `sts`, iniziativa/turni, schede personaggio; **e, solo se si vuole pubblicare**: moderazione UGC completa, privacy policy, age gate, store listing (stimare 2 sprint) | roadmap successiva |
 
-**Stima onesta**: ~9 sprint = **18 settimane / ~4,5 mesi calendario** per un singolo
-senior a tempo pieno, esclusi i tempi di review degli store e di eventuale
-consulenza legale. Con un secondo sviluppatore si parallelizzano S3–S4 (dadi) e
-S5–S6 (voce), ma non si scende sotto ~3 mesi: la pipeline audio e la conformità non
-si comprimono.
+**Ordine scelto e perché**: dadi e voce (S2–S5) vengono prima dei media perché sono
+le funzioni distintive e quelle con rischio tecnico alto — un rischio va colpito
+presto, non rimandato. Gli allegati (S6) sono tecnologia nota e a basso rischio:
+stanno bene in coda. La chat (S1) resta prima di tutto perché ogni altra funzione
+consegna il proprio risultato *dentro* un messaggio.
+
+**Stima onesta**: 8 sprint = **16 settimane / ~4 mesi calendario** per un singolo
+senior a tempo pieno. Rispetto alla versione "store pubblici" si risparmia circa uno
+sprint (conformità UGC e listing), non di più: la distribuzione privata **non**
+semplifica né la pipeline audio, né l'animazione, né il realtime, che sono il grosso
+del lavoro. Con un secondo sviluppatore si parallelizzano S2–S3 (dadi) e S4–S5
+(voce), arrivando realisticamente a ~3 mesi, non meno.
+
+**Primo momento in cui il gruppo può giocarci davvero**: fine S3 (~8 settimane) con
+chat + dadi completi, narrando a voce con i messaggi vocali non ancora trascritti.
+Da lì ogni sprint aggiunge valore su un'app già in uso — è il modo giusto di
+sfruttare la cerchia privata.
 
 ---
 
@@ -412,11 +471,20 @@ Per ognuna è indicato il **default** che adotterò se non rispondi.
 - **D3 — Budget mensile per API cloud (STT/TTS) e chi paga?**
   Default: tetto **20 €/mese totali in sviluppo**, il che impone DSP on-device come
   default di prodotto e cloud come opzione.
-- **D4 — Distribuzione: store pubblici o cerchia privata?**
-  Default: **store pubblici**, quindi F8/F9 sono obbligatori dallo Sprint 0.
-- **D5 — Piattaforme: iOS + Android o una sola per la v1?**
-  Default: **entrambe** (Expo lo rende sostenibile), con iOS come piattaforma di
-  riferimento per le performance.
+- **D4 — Distribuzione: store pubblici o cerchia privata?** → **DECISO: cerchia
+  privata.** Nessuna pubblicazione sugli store in v1.0. Conseguenze già recepite in
+  F8, F9, §4 e §12. Corollario vincolante: **progetta lo schema dati e i confini dei
+  moduli in modo che l'apertura al pubblico resti possibile** senza riscritture
+  (§F8), ma non pagare *ora* il costo di quella conformità.
+- **D5 — Piattaforme: iOS + Android, o solo Android per la v1?** *(diventata
+  decisione economica, non tecnica, dopo D4)* — con distribuzione privata, Android si
+  installa gratis via APK, mentre iOS richiede l'iscrizione a pagamento al programma
+  sviluppatori Apple e la gestione di tester/UDID.
+  Default: **entrambe**, con **Android come piattaforma di iterazione quotidiana** e
+  iOS allineato a ogni fine sprint. Se non si vuole sostenere la quota Apple,
+  rispondi "solo Android": si risparmiano ~3 story point per sprint di attrito di
+  build e il modulo audio nativo si dimezza (solo Kotlin/Oboe).
+  **Da sapere subito**: quali device useranno i giocatori, e quanti sono iOS.
 - **D6 — Device di riferimento minimo?**
   Default: iPhone 12 e un Android di fascia media del 2021 (Snapdragon 6xx /
   4 GB RAM). Tutti i target di §3 si riferiscono a questi.
@@ -439,8 +507,11 @@ Per ognuna è indicato il **default** che adotterò se non rispondi.
 3. Gli ADR proposti (solo titolo + opzioni da valutare) per: provider STT, provider
    TTS/STS, backend (Supabase vs custom), architettura audio nativa, rendering 3D dei
    dadi, strategia di licenza dei contenuti di regole.
-4. La tabella dei costi ricorrenti stimati a 10 tavoli attivi e a 1 000 tavoli attivi,
-   con le fonti di pricing verificate e la data di verifica.
+4. La tabella dei costi ricorrenti per lo scenario reale — **1 tavolo, 6 giocatori,
+   2 sessioni/settimana** — separando costi fissi (hosting, quota sviluppatore Apple
+   se D5 la richiede) e variabili (secondi STT, caratteri TTS, storage, egress), con
+   fonti di pricing verificate e data di verifica. Aggiungi una seconda colonna a
+   5 tavoli, come margine di crescita realistico per una cerchia privata.
 5. La lista di ciò che, nella mia richiesta iniziale, secondo te **non regge** e cosa
    proponi al suo posto.
 
@@ -486,10 +557,13 @@ un risultato** (test di sicurezza dedicato).
 > exploding), RNG autoritativo server-side verificabile via commit/reveal del seed, e
 > animazione 3D che converge sul risultato già deciso dal server, con alternativa
 > non animata; (5) allegati immagine e video con compressione, strip EXIF e URL
-> firmati. Vincoli: chiavi AI solo server-side, RLS + check applicativi, consenso
-> GDPR esplicito sull'elaborazione della voce, moderazione UGC per la review degli
-> store, nessun marchio o contenuto Wizards of the Coast, i18n it/en,
-> accessibilità AA. Lavora a sprint di 2 settimane: a ogni fine sprint build
+> firmati. Distribuzione **privata a invito** (APK sideload su Android, TestFlight o
+> ad hoc su iOS): nessuna pubblicazione sugli store, quindi niente apparato di
+> moderazione UGC, ma schema dati predisposto per aggiungerlo. Vincoli: chiavi AI solo
+> server-side, RLS + check applicativi, consenso esplicito e revocabile
+> sull'elaborazione cloud della voce con fallback offline funzionante, nessun marchio
+> o contenuto Wizards of the Coast, i18n it/en, accessibilità AA. Lavora a sprint di
+> 2 settimane: a ogni fine sprint build
 > installabile, metriche misurate, ADR, scostamenti dal piano e stop per validazione.
 > Prima di scrivere codice: domande bloccanti, piano Sprint 0 con spike misurati e
 > tabella costi verificata.
@@ -500,6 +574,9 @@ un risultato** (test di sicurezza dedicato).
   effetto scenico) o è cloud (credibile, con latenza e costo per minuto).
 - Trascrizione accurata sui nomi propri fantasy senza glossario e senza correzione manuale.
 - Animazione 3D fluida su qualunque Android senza un budget di performance e un fallback.
-- Pubblicazione rapida sugli store con UGC e microfono: moderazione e privacy sono
-  sprint di lavoro, non checkbox.
-- Una v1 in "qualche settimana": il numero onesto è ~4,5 mesi per un senior.
+- Che la distribuzione privata renda il progetto "piccolo": taglia circa uno sprint
+  su otto. Il costo sta nella pipeline audio, nel realtime e nell'animazione.
+- Che su iOS si installi l'app agli amici senza iscrizione a pagamento al programma
+  sviluppatori Apple.
+- Una v1 in "qualche settimana": il numero onesto è ~4 mesi per un senior; primo
+  build davvero giocabile (chat + dadi) a ~8 settimane.
