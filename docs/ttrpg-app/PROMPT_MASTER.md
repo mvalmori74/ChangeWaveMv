@@ -41,7 +41,7 @@ Regole vincolanti per tutta la durata del lavoro:
 
 ## 1. Obiettivo del prodotto
 
-App mobile (iOS + Android) per giocare **giochi di ruolo da tavolo in remoto**, con
+App mobile **Android** (§13-D5) per giocare **giochi di ruolo da tavolo in remoto**, con
 UX da app di messaggistica (paradigma WhatsApp: liste chat, thread, messaggi vocali,
 allegati), specializzata sul tavolo da gioco.
 
@@ -62,8 +62,8 @@ cronologia, media e log dei tiri di dado.
 Ogni requisito ha ID stabile: usalo nei commit (`feat(F3): ...`) e nei test.
 
 ### F1 — Account, tavoli, membri
-- Registrazione/login: email magic link + Apple Sign-In (obbligatorio su iOS se
-  esiste login social) + Google Sign-In.
+- Registrazione/login: email magic link + Google Sign-In. Nessun Apple Sign-In:
+  senza build iOS, non serve.
 - Creazione tavolo, invito via link/QR con scadenza, ruoli `gm` | `player`,
   espulsione, abbandono, trasferimento GM.
 - Profilo: nickname, avatar, fuso orario, lingua.
@@ -96,37 +96,60 @@ trascritto → **in chat compare il testo** insieme all'audio riproducibile.
   è la norma, non l'eccezione).
 - **Glossario di campagna**: nomi di PNG, luoghi e oggetti passati al motore STT come
   hint/boost per ridurre gli errori.
-- Lingua sorgente selezionabile per tavolo; **traduzione opzionale** (feature flag, vedi §13-D1).
-- Fallback: se lo STT cloud è indisponibile o l'utente ha negato il consenso, il
-  messaggio vocale resta puro audio con banner "trascrizione non disponibile".
+- Lingua italiana come default di tavolo. **Nessuna traduzione**: decisione §13-D1,
+  solo trascrizione nella lingua parlata. La traduzione multilingua resta in
+  `docs/backlog.md` e **non** va predisposta con astrazioni speculative.
+- **Due livelli di motore STT** (conseguenza diretta del budget §4-bis):
+  - **Tier 0 — on-device Android, costo zero**: riconoscimento vocale di sistema
+    (`SpeechRecognizer`, con pacchetto lingua italiana scaricato per funzionare
+    offline). Default di prodotto. Limiti reali: boost del vocabolario personalizzato
+    assente o molto limitato, qualità inferiore sul parlato lungo, comportamento
+    variabile tra produttori di device. Vanno misurati, non ipotizzati.
+  - **Tier 1 — cloud, opt-in e contabilizzato**: usato quando l'utente lo attiva e il
+    budget residuo lo consente. Guadagno atteso: accuratezza e **boost del glossario
+    di campagna** (i nomi inventati sono esattamente ciò che il Tier 0 sbaglia).
+  - La selezione del tier è una policy server-side, non una `if` sparsa nel client.
+- Fallback a cascata: Tier 1 → Tier 0 → solo audio con banner "trascrizione non
+  disponibile". Nessuno di questi stati deve rompere la chat.
 
-**AC**: WER misurato su un set di 20 clip italiane di narrazione (con glossario
-attivo) documentato in `docs/quality/stt-benchmark.md`. Nessun target inventato:
-si misura e si riporta il numero reale.
+**AC**: WER misurato su uno stesso set di 20 clip italiane di narrazione fantasy,
+**per entrambi i tier** (Tier 1 con e senza glossario), documentato in
+`docs/quality/stt-benchmark.md`. Nessun target inventato: si misura e si riporta il
+numero reale. Se il delta Tier 1 − Tier 0 è marginale, **proponi di eliminare il
+Tier 1** e liberare l'intero budget per il TTS.
 
 ### F4 — Voci e modulazione (orco, elfo, nano, umano, …)
 Requisito centrale e la parte tecnicamente più delicata. Implementa **un'interfaccia,
-tre backend**:
+tre backend** (di cui due nella v1.0):
 
 ```
 interface VoiceTransform {
-  id: string; label: string; engine: 'dsp' | 'tts' | 'sts';
+  id: string; label: string; engine: 'dsp' | 'tts-local' | 'tts-cloud';
   render(input: AudioOrText, opts): Promise<AudioStream>;
 }
 ```
 
-- **Backend A — `dsp` (on-device, sempre disponibile)**: pitch shift + formant shift +
-  EQ + saturazione/riverbero leggero via grafo audio nativo (AVAudioEngine su iOS,
-  Oboe/SoundTouch su Android). Latenza < 40 ms, costo zero, funziona offline.
-  Qualità "effetto scenico", non realismo. Preset: `orco` (pitch −5 st, formant −15%,
-  growl), `nano` (pitch −3 st, boost 200–400 Hz), `elfo` (pitch +3 st, aria, riverbero
-  ampio), `goblin` (pitch +7 st, compressione aggressiva), `umano` (bypass).
-- **Backend B — `tts` (cloud, dal testo trascritto)**: una voce di sintesi per preset,
-  streaming. È la resa più pulita e riusa la trascrizione già necessaria per F3.
-  Perde la recitazione dell'attore umano.
-- **Backend C — `sts` (speech-to-speech, cloud, dietro feature flag)**: conversione
-  timbrica che **conserva prosodia e recitazione**. Miglior risultato, costo e latenza
-  più alti. Non nel percorso critico della v1.0.
+- **Backend A — `dsp` (on-device, costo zero, sempre disponibile)**: pitch shift +
+  formant shift + EQ + saturazione/riverbero leggero su grafo audio nativo Android
+  (Oboe/AAudio + libreria di time-stretch/pitch-shift, con licenza commerciale
+  verificata — attenzione: alcune librerie di pitch shifting sono GPL o a doppia
+  licenza, verificalo **prima** di integrarle e registralo in `docs/licenses.md`).
+  Latenza < 40 ms, funziona offline. Qualità "effetto scenico", non realismo.
+  Preset di partenza in Appendice A.
+- **Backend B — `tts-local` (on-device, costo zero)**: motore TTS di sistema Android,
+  parametrizzato per voce/pitch/velocità e **poi passato per la catena DSP**. È la
+  combinazione che rende possibile avere voci di personaggio **a costo marginale
+  nullo e offline**, che è ciò che il budget di §4-bis richiede. Qualità: intelligibile
+  ma sintetica. Da misurare, non da dare per buona.
+- **Backend C — `tts-cloud` (opt-in, contabilizzato)**: TTS neurale di una cloud
+  *commodity* (classe Azure/Google/Polly), non di un provider premium: vedi il calcolo
+  in §4-bis, con 20 €/mese i provider di fascia alta sono fuori discussione. Streaming,
+  cache aggressiva dell'audio renderizzato (stesso testo + stesso preset = nessuna
+  seconda chiamata).
+- **Backend D — `sts` (speech-to-speech, conserva la recitazione)**: **fuori budget,
+  spostato in `docs/backlog.md`.** Era il risultato qualitativamente migliore ed è
+  giusto sapere che lo si sta rinunciando per vincolo economico, non tecnico.
+  Non lasciare codice morto o feature flag inerti per questo backend.
 
 Requisiti trasversali:
 - Selettore voce persistente per membro **e** override per singolo messaggio (il GM
@@ -135,11 +158,18 @@ Requisiti trasversali:
   sceglie cosa ascoltare (originale / voce PNG) e può leggere solo il testo.
 - Nessuna clonazione della voce di persone reali senza consenso esplicito e
   registrato. Voci preset only in v1.0: è anche un vincolo legale, non solo etico.
-- **Budget guard**: contatore secondi STT e caratteri TTS per utente/mese, con soglia
-  di blocco e degrado automatico al backend `dsp`.
+- **Budget guard** (vedi §4-bis): contatore di secondi STT cloud e caratteri TTS
+  cloud per tavolo e per mese, verificato **server-side** prima di ogni chiamata a
+  pagamento, con soglia di allerta (80 %) e degrado automatico e silenzioso ai
+  backend a costo zero al raggiungimento del tetto. Il degrado va **mostrato in app**
+  con un'etichetta comprensibile, non subìto senza spiegazione.
+- **Cache dell'audio renderizzato** indicizzata su `hash(testo + preset + versione
+  motore)`: a un tavolo che rigioca le stesse frasi non si paga due volte.
 
-**AC**: A/B ascoltabile dei tre backend sui 4 preset, con latenza p50/p95 e costo per
-minuto misurati e tabellati in `docs/quality/voice-benchmark.md`.
+**AC**: A/B ascoltabile dei backend A, B e C sui 4 preset, con latenza p50/p95 e
+**costo per minuto di narrazione** misurati e tabellati in
+`docs/quality/voice-benchmark.md`. Conclusione esplicita richiesta: quali preset
+reggono a costo zero (A+B) e per quali il cloud vale davvero la spesa.
 
 ### F5 — Dadi
 - Notazione completa: `NdX`, modificatori (`+3`, `-1`), keep/drop (`4d6kh3`, `2d20kl1`),
@@ -169,9 +199,22 @@ raggiungibile, degradazione documentata a 30 fps o a sprite pre-renderizzati.
 - Immagini (mappe, handout, ritratti) e video brevi, da camera o galleria.
 - Compressione client-side prima dell'upload, **strip EXIF/GPS**, generazione
   thumbnail, upload resumibile con progress e retry, cancellazione.
-- Limiti espliciti e comunicati: immagine ≤ 10 MB, video ≤ 100 MB / 60 s (tarabili).
+- Limiti espliciti e comunicati, **derivati dal budget di §4-bis e non scelti a
+  gusto**: immagine ≤ 8 MB (ricompressa a lato lungo 2048 px), video ≤ 25 MB / 30 s.
+  Se il tier di storage gratuito scelto è più capiente del previsto, alzali con un
+  cambio di configurazione, non di codice.
+- **Retention dei media**: scadenza automatica configurabile (default 90 giorni) con
+  possibilità per il GM di **fissare (`pin`)** fino a N elementi come permanenti — le
+  mappe e gli handout servono per tutta la campagna, i meme del giovedì no. Senza
+  questo meccanismo lo storage cresce in modo monotono e il tetto di 20 €/mese salta
+  nel giro di pochi mesi. È un requisito, non un'ottimizzazione.
+- **Retention dell'audio**: l'audio originale dei messaggi vocali scade prima
+  (default 30 giorni); la **trascrizione resta per sempre** perché è testo e non
+  costa nulla. Comunicalo in app: è anche il modo in cui la cronologia di campagna
+  resta consultabile a costo zero.
 - Visualizzatore full-screen con pinch-zoom, salvataggio in galleria, player video.
-- URL firmati a TTL breve; nessun bucket pubblico.
+- URL firmati a TTL breve; nessun bucket pubblico; storage **senza costi di egress**
+  (vedi §4-bis): con i video, l'egress è la voce che sorprende.
 
 ### F7 — Notifiche push
 - APNs/FCM per nuovo messaggio, menzione, inizio sessione, tiro del GM.
@@ -231,11 +274,14 @@ target touch ≥ 44 pt, navigazione da tastiera esterna.
 | Cold start → chat usabile | < 1,5 s (device medio) | trace startup in CI perf |
 | Latenza messaggio testo E2E | p95 < 400 ms (stessa regione) | timestamp server-client |
 | Vocale: fine registrazione → trascrizione visibile | p95 < 4 s per 30 s di audio | telemetria |
-| TTS: richiesta → primo byte audio | p95 < 800 ms | telemetria |
+| TTS locale: richiesta → primo byte audio | p95 < 300 ms | telemetria |
+| TTS cloud: richiesta → primo byte audio | p95 < 800 ms | telemetria |
 | Animazione dado | 60 fps target, 30 fps floor | profiler su device di riferimento |
 | Crash-free sessions | ≥ 99,5 % | Sentry |
-| Costo variabile per ora di sessione | budget da §13-D3 | dashboard costi per feature |
-| Consumo batteria sessione 3 h | ≤ 25 % su device medio | misura manuale documentata |
+| **Costo totale mensile (fisso + variabile)** | **≤ 20 €** (§4-bis) | dashboard costi per feature, allarme a 16 € |
+| Costo marginale con budget esaurito | **0 €** (degrado a Tier 0) | test del budget guard |
+| Occupazione storage a regime | entro il tier gratuito scelto | job di retention + metrica |
+| Consumo batteria sessione 3 h | ≤ 25 % su device di riferimento | misura manuale documentata |
 
 ---
 
@@ -243,15 +289,30 @@ target touch ≥ 44 pt, navigazione da tastiera esterna.
 
 Prescritto, salvo ADR che motivi la deviazione:
 
-**Mobile**
+**Mobile — solo Android** (decisione §13-D5)
 - React Native (ultima release stabile) + **Expo (dev client + EAS Build)**, TypeScript `strict`.
 - Navigazione: `expo-router`. Stato: Zustand (client) + TanStack Query (server state).
 - Persistenza locale: SQLite (`expo-sqlite`) con Drizzle ORM; migrazioni versionate.
 - UI: design system proprio minimale (token di spacing/colore/tipografia) — niente
   libreria UI pesante. Animazioni: Reanimated 3 + Gesture Handler. Grafica dadi: GPU
   3D (three.js su contesto nativo) con fallback sprite.
-- Audio: modulo nativo custom per il grafo DSP (Swift/Kotlin) esposto via JSI/Turbo
-  Module. Registrazione/riproduzione con libreria audio Expo.
+- Audio: **un solo modulo nativo, in Kotlin** (Oboe/AAudio per la catena DSP, motore
+  TTS e `SpeechRecognizer` di sistema), esposto via Turbo Module. Nessun codice Swift,
+  nessun doppio mantenimento.
+- **Conseguenze dell'Android-only da sfruttare e da subire, entrambe**:
+  - *Da sfruttare*: STT e TTS di sistema disponibili e gratuiti (F3 Tier 0, F4
+    backend B); nessuna quota annuale di programma sviluppatori; installazione via
+    APK senza intermediari; build eseguibili anche in locale senza consumare crediti
+    cloud.
+  - *Da subire*: la frammentazione. Il motore STT/TTS di sistema **non è lo stesso
+    su tutti i device** (produttore, versione Android, pacchetti lingua installati).
+    Serve una **matrice di device di test** dichiarata in `docs/devices.md` con i
+    device reali del gruppo di gioco, e un rilevamento a runtime delle capacità
+    (lingua italiana disponibile? riconoscimento offline supportato? quali voci TTS?)
+    con degrado esplicito quando mancano. Non assumere nulla dal tuo emulatore.
+  - Il porting su iOS resta possibile in futuro **solo se** il modulo nativo espone
+    un'interfaccia platform-agnostic: definiscila bene ora, costa poco; non scrivere
+    però alcuna implementazione iOS.
 
 **Backend**
 - Node 22 + TypeScript, Fastify (REST) + WebSocket per il realtime, Postgres,
@@ -263,10 +324,12 @@ Prescritto, salvo ADR che motivi la deviazione:
 - Monorepo pnpm: `apps/mobile`, `apps/api`, `packages/shared` (tipi + schema Zod +
   **motore dadi condiviso**), `packages/data-access`.
 
-**Provider AI** — scelti dopo lo spike dello Sprint 0, con questi criteri: latenza
-streaming, qualità sull'italiano, presenza di DPA/EU data residency, costo unitario,
-esistenza di un fallback. Nessun lock-in: interfacce `SttProvider` / `TtsProvider` /
-`VoiceConversionProvider` con almeno due implementazioni ciascuna.
+**Provider AI** — scelti dopo lo spike dello Sprint 0, con questi criteri, in
+quest'ordine di priorità: **costo unitario e ampiezza del tier gratuito** (§4-bis),
+qualità sull'italiano, latenza streaming, opt-out dall'addestramento, data residency
+UE. Nessun lock-in: interfacce `SttProvider` e `TtsProvider` con almeno due
+implementazioni ciascuna, di cui **una on-device a costo zero** (che è sempre anche
+il fallback).
 
 **Infra/CI**
 GitHub Actions (lint, typecheck, test, build), EAS Build, canali
@@ -279,20 +342,76 @@ cui partire:
 - **Android**: build APK/AAB firmato con EAS, installazione diretta via link
   (sideload). Nessun account a pagamento necessario. Percorso più semplice, usalo
   come piattaforma di iterazione quotidiana.
-- **iOS**: installare su device di altre persone richiede il **Apple Developer
-  Program a pagamento** (quota annuale). Due strade: *TestFlight* per tester interni
-  (limite di tester, nessuna review completa per le build interne) oppure
-  *distribuzione ad hoc* con registrazione dei UDID dei device e ri-firma periodica.
-  Il profilo ad hoc **scade** e le build vanno rigenerate: mettilo nel runbook, non
-  scoprirlo il giorno della sessione.
-- **Vincolo architetturale da non dimenticare**: il modulo audio nativo (F4, backend
-  `dsp`) rende impossibile usare il client Expo generico. Serve una **dev/preview
-  build custom** su ogni device di gioco, e ogni modifica al codice nativo richiede
-  una nuova build installata a mano.
+- **iOS: fuori scope** (§13-D5). La quota annuale del programma sviluppatori Apple
+  sarebbe da sola una frazione consistente del budget mensile di §4-bis, prima di
+  qualunque riga di codice. Non scrivere, non configurare, non testare nulla per iOS.
+- **Vincolo architetturale da non dimenticare**: il modulo audio nativo (F4) rende
+  impossibile usare il client Expo generico. Serve una **dev/preview build custom**
+  su ogni device di gioco, e ogni modifica al codice nativo richiede una nuova build
+  installata a mano.
+- **Keystore di firma**: generalo una volta, custodiscilo e documenta dove sta
+  (`docs/runbooks/`). Perderlo significa che nessun device può più ricevere
+  aggiornamenti in-place dell'APK. È il singolo punto di fallimento più banale e più
+  fastidioso di tutta la distribuzione privata.
+- **Installazione**: prevedi una pagina o un canale interno con l'APK corrente, il
+  changelog e le istruzioni per l'installazione da origine sconosciuta. I giocatori
+  non sono sviluppatori.
 - **Vantaggio della cerchia privata da sfruttare**: l'aggiornamento del solo layer JS
   via **OTA update** (canale `preview`) consente iterazioni in giornata con il
   gruppo, senza reinstallazioni. Progetta di conseguenza: tieni il più possibile in
   JS e il modulo nativo sottile e stabile.
+
+### §4-bis — Budget operativo: 20 €/mese (vincolo di progetto)
+
+Decisione §13-D3: **tetto di 20 €/mese, tutto compreso**. Non è un obiettivo di
+risparmio, è un vincolo architetturale: determina la scelta dei motori vocali (F3,
+F4), i limiti sui media (F6) e la politica di retention. Trattalo come tratteresti
+un vincolo di memoria su un embedded.
+
+**Metodo di calcolo da rifare con prezzi verificati nello Sprint 0** (riporta fonte e
+data; i prezzi cambiano e non devono essere copiati da qui):
+
+```
+scenario di riferimento (§13-D7): 1 tavolo, 6 giocatori, 2 sessioni/settimana × 3 h
+  = ~24 h/mese di sessione
+  di cui parlato effettivamente registrato come messaggio vocale: stimare ~25-30%
+  = ~6-7 h/mese di audio  ≈ 400 min
+  trascrizione: ~150 parole/min → ~60.000 parole/mese → ~380.000 caratteri
+costo_STT_mese   = 400 min × prezzo_al_minuto
+costo_TTS_mese   = 380.000 char × prezzo_per_carattere × quota_messaggi_riascoltati
+costo_storage    = GB accumulati (al netto della retention F6) × prezzo_GB
+costo_egress     = GB scaricati dai 6 device × prezzo_GB   ← la voce dimenticata
+costo_fisso      = hosting + DB + eventuale tier a pagamento
+```
+
+**Conclusioni già ricavabili, da confermare con i numeri reali:**
+1. Il TTS è la voce dominante, non lo STT. Un provider TTS *premium* costa
+   tipicamente un ordine di grandezza più di una cloud *commodity*: con questo tetto
+   **i provider premium sono esclusi**, e anche una commodity va usata con cache e
+   tetto. Da qui la scelta di F4 backend B (TTS di sistema + DSP) come **default**.
+2. **Verifica i tier gratuiti permanenti** dei provider cloud (STT e TTS hanno spesso
+   quote mensili gratuite): allo scenario di 1 tavolo è plausibile che il fabbisogno
+   ci rientri quasi tutto. Se è così, il budget diventa riserva e non spesa corrente —
+   ma **non progettare assumendolo**: il budget guard deve funzionare comunque.
+3. **Storage: scegli un provider object-storage con egress gratuito.** Con i video
+   allegati, il traffico in uscita verso 6 device può superare il costo dello storage
+   stesso. Questo singolo punto vale più di molte micro-ottimizzazioni.
+4. **Niente servizi con sospensione per inattività** su ciò che serve durante una
+   sessione, o il primo tiro della serata aspetta il cold start. Verifica il
+   comportamento dei tier gratuiti su questo punto specifico e documentalo.
+5. Preferisci il tier gratuito di un managed service a un VPS a pagamento **solo se**
+   i limiti reggono lo scenario; altrimenti un VPS minimale è più prevedibile. La
+   scelta va in un ADR con i numeri, non a intuito.
+
+**Requisiti implementativi del budget guard:**
+- Contatori persistiti server-side (`usage_counters`), per tavolo e per mese, con
+  reset a calendario e **verifica prima della chiamata** a pagamento, non dopo.
+- Prezzi unitari in configurazione, non hard-coded: quando il provider cambia
+  listino, si aggiorna un valore.
+- Dashboard con spesa corrente, proiezione a fine mese e ripartizione per feature.
+- Allarme all'80 % del tetto, degrado automatico al 100 %.
+- **Test automatico del degrado**: con budget simulato esaurito, l'app deve restare
+  pienamente funzionale a costo zero. È un test di accettazione, non una prova manuale.
 
 ---
 
@@ -345,23 +464,38 @@ MIME reale (magic bytes, non l'estensione).
 
 Apri `docs/risks.md` e mantienilo aggiornato. Partenza obbligatoria:
 
-1. **Qualità STT sull'italiano fantasy**: i nomi propri inventati sono il caso peggiore
-   per qualunque ASR. Mitigazione: glossario di campagna + editing della trascrizione
-   (F3). Non promettere accuratezza che non si misura.
-2. **Latenza e costo della voce cloud**: modulazione realistica in tempo reale costa e
-   introduce latenza. Mitigazione: DSP on-device come default, cloud opzionale,
-   budget guard.
-3. **Animazione 3D su Android low-end**: rischio di jank e drain. Mitigazione: budget
-   di performance fissato nello Sprint 0 e fallback sprite pre-renderizzato.
-4. **Autonomia batteria** in sessioni di 3–4 ore con audio e schermo attivi.
-5. **Attrito di distribuzione su iOS** (§4): senza Apple Developer Program a
-   pagamento i device dei tuoi giocatori iOS restano tagliati fuori; con esso restano
-   la gestione dei UDID/tester e la scadenza dei profili. Rischio operativo
-   ricorrente, non una tantum. Mitigazione: runbook + promemoria di rinnovo, Android
-   come piattaforma di riferimento per l'iterazione.
-6. **IP**: vedi §8. Il nome e l'iconografia sono un rischio legale, non grafico.
-7. **Lock-in sui provider AI**: mitigato da interfaccia + secondo provider pronto.
-8. **Consenso GDPR sulla voce**: se sbagliato, blocca la distribuzione in UE.
+1. **[ALTO] Qualità dello STT on-device sull'italiano fantasy.** È il rischio numero
+   uno del progetto dopo le ultime decisioni: i nomi propri inventati sono il caso
+   peggiore per qualunque ASR, e il motore di sistema Android **non accetta un
+   glossario personalizzato** come farebbe una cloud. Se il Tier 0 produce
+   trascrizioni da riscrivere a mano ogni volta, la funzione perde senso.
+   Mitigazione: editing della trascrizione sempre disponibile (F3), Tier 1 cloud
+   opt-in entro budget, e **misurazione nello Sprint 0 prima di costruirci sopra**.
+   Se lo spike dà esito negativo, l'alternativa onesta è dichiarare la trascrizione
+   "assistita" (bozza da correggere) invece che automatica.
+2. **[ALTO] Frammentazione Android su STT e TTS di sistema** (§4): motori, voci e
+   pacchetti lingua cambiano per produttore e versione. Un preset che suona bene sul
+   tuo device può non esistere su quello di un giocatore. Mitigazione: rilevamento
+   capacità a runtime, degrado esplicito, matrice device reale in `docs/devices.md`,
+   test sui device effettivi del gruppo — non sull'emulatore.
+3. **[MEDIO] Tetto di 20 €/mese** (§4-bis): un errore di stima sui prezzi unitari, o
+   una retention non implementata, fa saltare il budget in silenzio. Mitigazione:
+   budget guard server-side con verifica *prima* della chiamata, degrado automatico a
+   costo zero, allarme all'80 %, retention F6 come requisito e non come cleanup
+   rinviato.
+4. **[MEDIO] Animazione 3D su Android di fascia media/bassa**: jank e consumo.
+   Mitigazione: budget di performance fissato nello Sprint 0 sui device reali e
+   fallback sprite pre-renderizzato.
+5. **[MEDIO] Autonomia batteria** in sessioni di 3–4 ore con audio, schermo attivo e
+   animazioni. Su Android di fascia media è un problema concreto: misuralo in S0 e
+   riportalo, non rimandarlo alla beta.
+6. **[BASSO] IP**: vedi §8. Il nome e l'iconografia sono un rischio legale, non grafico.
+7. **[BASSO] Lock-in sui provider AI**: mitigato dall'interfaccia e dal fatto che il
+   fallback on-device è sempre presente.
+8. **[BASSO, ma non nullo] Consenso sull'elaborazione della voce** (F9): con
+   distribuzione privata il rischio regolatorio è limitato, ma l'audio di persone
+   reali esce comunque verso terzi quando il Tier 1 è attivo. Il consenso e il
+   funzionamento completo in caso di rifiuto restano requisiti.
 
 ---
 
@@ -409,7 +543,9 @@ audio.
 ## 11. Consegna per sprint
 
 A fine di **ogni** sprint produci, senza che io debba chiederlo:
-1. Build installabile (TestFlight / Play internal testing o APK firmato).
+1. **APK firmato installabile**, con changelog, pubblicato sul canale interno del
+   gruppo; più l'eventuale OTA update sul canale `preview` se lo sprint ha toccato
+   solo il layer JS.
 2. `docs/sprints/sprint-NN.md`: fatto / non fatto e perché / metriche misurate /
    decisioni / rischi nuovi / debito tecnico creato con costo stimato di rientro.
 3. ADR delle decisioni prese.
@@ -428,7 +564,7 @@ sprint sfora, **non comprimere la qualità**: riporta lo scostamento e rinegozia
 
 | Sprint | Tema | Contenuto | Esito atteso |
 |---|---|---|---|
-| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, **catena di distribuzione privata funzionante su un device reale per piattaforma**, **spike misurati**: STT it, TTS/STS (latenza+costo), DSP nativo, 3D dadi su device low-end; verifica licenze §8 | Decisioni provider chiuse con numeri; build custom installata e aggiornabile OTA |
+| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, keystore, APK installato sui **device reali del gruppo**, tabella costi §4-bis con prezzi verificati, **spike misurati**: STT Tier 0 vs Tier 1 su clip fantasy italiane, TTS di sistema + DSP vs TTS cloud, catena DSP Kotlin, 3D dadi e batteria sul device più debole; verifica licenze §8 e della libreria di pitch shifting | Decisioni provider chiuse con numeri; **verdetto esplicito: il Tier 0 basta o no** |
 | **S1** | Auth + tavoli + chat | F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) + push base "nuovo messaggio" | Il gruppo può già usarla come chat e darti feedback da qui in avanti |
 | **S2** | Motore dadi | F5 parser + RNG verificabile + messaggio strutturato + test statistici e di sicurezza | Tiri corretti, provabili, non falsificabili |
 | **S3** | Scenografia dadi | F5 animazione 3D, haptics, SFX, fallback ridotto/sprite, budget performance | L'effetto "wow" senza jank |
@@ -444,12 +580,22 @@ presto, non rimandato. Gli allegati (S6) sono tecnologia nota e a basso rischio:
 stanno bene in coda. La chat (S1) resta prima di tutto perché ogni altra funzione
 consegna il proprio risultato *dentro* un messaggio.
 
+**Punto di decisione dopo S0 — da rispettare.** Se lo spike dice che lo STT
+on-device non regge sulla narrazione fantasy italiana e il cloud non sta nel budget,
+**fermati e riporta**: le opzioni saranno (a) alzare il tetto di spesa, (b)
+ridefinire la trascrizione come bozza da correggere a mano, (c) limitare la
+trascrizione ai messaggi brevi. Non scegliere da solo e non proseguire come se il
+problema non esistesse.
+
 **Stima onesta**: 8 sprint = **16 settimane / ~4 mesi calendario** per un singolo
-senior a tempo pieno. Rispetto alla versione "store pubblici" si risparmia circa uno
-sprint (conformità UGC e listing), non di più: la distribuzione privata **non**
-semplifica né la pipeline audio, né l'animazione, né il realtime, che sono il grosso
-del lavoro. Con un secondo sviluppatore si parallelizzano S2–S3 (dadi) e S4–S5
-(voce), arrivando realisticamente a ~3 mesi, non meno.
+senior a tempo pieno. L'Android-only fa risparmiare attrito reale (un solo modulo
+nativo, una sola catena di firma e distribuzione, nessuna review), ma lo restituisce
+in parte sotto forma di test sulla frammentazione dei motori vocali di sistema: il
+saldo netto è circa **mezzo sprint**, non due. Rispetto alla versione originale
+"store pubblici, due piattaforme" siamo passati da ~18 a ~16 settimane; il grosso del
+lavoro — pipeline audio, realtime, animazione — non si è mosso, perché non dipendeva
+da quelle decisioni. Con un secondo sviluppatore si parallelizzano S2–S3 (dadi) e
+S4–S5 (voce), arrivando realisticamente a ~3 mesi.
 
 **Primo momento in cui il gruppo può giocarci davvero**: fine S3 (~8 settimane) con
 chat + dadi completi, narrando a voce con i messaggi vocali non ancora trascritti.
@@ -462,32 +608,36 @@ sfruttare la cerchia privata.
 
 Per ognuna è indicato il **default** che adotterò se non rispondi.
 
-- **D1 — "trascrizione tradotta": trascrizione o traduzione?**
-  Default: **solo trascrizione** nella lingua parlata; traduzione multilingua dietro
-  feature flag, non nel percorso critico.
+- **D1 — "trascrizione tradotta": trascrizione o traduzione?** → **DECISO:
+  trascrizione**, nella lingua parlata. Nessuna traduzione, nessun feature flag,
+  nessuna astrazione predisposta: la traduzione sta in `docs/backlog.md` e se
+  servirà si aggiungerà come step della pipeline (F3 è già a step espliciti, quindi
+  non è debito).
 - **D2 — Voce live o messaggi vocali asincroni?**
   Default: **asincrono push-to-talk** in v1 (coerente con il paradigma WhatsApp,
   costi e complessità molto inferiori); room live in S9+.
-- **D3 — Budget mensile per API cloud (STT/TTS) e chi paga?**
-  Default: tetto **20 €/mese totali in sviluppo**, il che impone DSP on-device come
-  default di prodotto e cloud come opzione.
+- **D3 — Budget mensile per API cloud (STT/TTS) e chi paga?** → **DECISO: 20 €/mese
+  tutto compreso** (infrastruttura + AI + storage). Conseguenze in §4-bis, F3, F4, F6.
+  Sintesi: motori on-device a costo zero come default di prodotto, cloud come
+  opzione contabilizzata, retention dei media obbligatoria, provider premium esclusi.
 - **D4 — Distribuzione: store pubblici o cerchia privata?** → **DECISO: cerchia
   privata.** Nessuna pubblicazione sugli store in v1.0. Conseguenze già recepite in
   F8, F9, §4 e §12. Corollario vincolante: **progetta lo schema dati e i confini dei
   moduli in modo che l'apertura al pubblico resti possibile** senza riscritture
   (§F8), ma non pagare *ora* il costo di quella conformità.
-- **D5 — Piattaforme: iOS + Android, o solo Android per la v1?** *(diventata
-  decisione economica, non tecnica, dopo D4)* — con distribuzione privata, Android si
-  installa gratis via APK, mentre iOS richiede l'iscrizione a pagamento al programma
-  sviluppatori Apple e la gestione di tester/UDID.
-  Default: **entrambe**, con **Android come piattaforma di iterazione quotidiana** e
-  iOS allineato a ogni fine sprint. Se non si vuole sostenere la quota Apple,
-  rispondi "solo Android": si risparmiano ~3 story point per sprint di attrito di
-  build e il modulo audio nativo si dimezza (solo Kotlin/Oboe).
-  **Da sapere subito**: quali device useranno i giocatori, e quanti sono iOS.
-- **D6 — Device di riferimento minimo?**
-  Default: iPhone 12 e un Android di fascia media del 2021 (Snapdragon 6xx /
-  4 GB RAM). Tutti i target di §3 si riferiscono a questi.
+- **D5 — Piattaforme** → **DECISO: solo Android.** Nessun codice, configurazione o
+  test iOS. Modulo nativo unico in Kotlin. Coerente con D3: la sola quota annuale
+  Apple avrebbe eroso una frazione rilevante dei 20 €/mese.
+  **Requisito operativo aperto**: serve l'elenco reale dei device Android del gruppo
+  di gioco (modello e versione Android) da mettere in `docs/devices.md`. Senza quello
+  non si può fissare il target di performance né verificare i motori vocali.
+- **D6 — Device Android di riferimento minimo?** *(ultima decisione tecnica aperta:
+  da essa dipendono tutti i target di §3, il budget di performance
+  dell'animazione 3D e la misura di batteria)*
+  Default: **Android 11+ su fascia media del 2021** (SoC classe Snapdragon 6xx,
+  4 GB RAM, GPU Adreno 6xx). Tutto ciò che sta sotto questa soglia riceve
+  automaticamente il fallback non animato dei dadi.
+  Rispondi con i modelli veri dei device del gruppo e il default viene sostituito.
 - **D7 — Dimensione del tavolo e durata sessione tipica** (serve per dimensionare
   fan-out e costi).
   Default: 6 membri, 3 ore, 2 sessioni/settimana per tavolo.
@@ -504,9 +654,11 @@ Per ognuna è indicato il **default** che adotterò se non rispondi.
 1. Le domande bloccanti che restano dopo aver letto §13 (massimo 5).
 2. Il piano dello **Sprint 0** in story con story point, dipendenze e criteri di
    accettazione, inclusi gli spike con la metrica esatta che ciascuno deve produrre.
-3. Gli ADR proposti (solo titolo + opzioni da valutare) per: provider STT, provider
-   TTS/STS, backend (Supabase vs custom), architettura audio nativa, rendering 3D dei
-   dadi, strategia di licenza dei contenuti di regole.
+3. Gli ADR proposti (solo titolo + opzioni da valutare) per: STT Tier 0 vs Tier 1 e
+   scelta del provider cloud, TTS di sistema vs TTS cloud, backend (managed a tier
+   gratuito vs VPS) e object storage senza egress, architettura del modulo audio
+   Kotlin con la libreria di pitch shifting e la sua licenza, rendering 3D dei dadi,
+   strategia di licenza dei contenuti di regole.
 4. La tabella dei costi ricorrenti per lo scenario reale — **1 tavolo, 6 giocatori,
    2 sessioni/settimana** — separando costi fissi (hosting, quota sviluppatore Apple
    se D5 la richiede) e variabili (secondi STT, caratteri TTS, storage, egress), con
@@ -531,8 +683,15 @@ Poi fermati e aspetta il mio ok.
 | Elfo | +3 st / +6 % / riverbero ampio, air shelf 8 kHz | facile da esagerare |
 | Goblin | +7 st / +12 % / compressione aggressiva, bitcrush leggero | usare con parsimonia |
 
-Lo spike deve dire, con file audio alla mano, **quali preset reggono in DSP** e quali
-richiedono il cloud per essere credibili. Non decidere a tavolino.
+Lo spike deve produrre, con file audio alla mano, **tre righe di verdetto per ogni
+preset**: resa applicando il DSP alla voce umana registrata; resa applicando il DSP
+al TTS di sistema; resa del TTS cloud. E la risposta alla domanda che conta: *quali
+preset sono accettabili a costo zero?* Non decidere a tavolino.
+
+Nota su un dettaglio che si scopre tardi: il pitch shifting di una voce umana **già
+compressa** (l'audio del messaggio vocale è codificato per stare leggero) accumula
+artefatti. Valuta se conservare l'audio a qualità più alta per il solo tempo
+necessario al rendering, e misura l'impatto su storage e budget (§4-bis).
 
 ## Appendice B — Casi di test obbligatori sul motore dadi
 
@@ -546,37 +705,51 @@ un risultato** (test di sicurezza dedicato).
 
 ## Appendice C — Prompt breve (se ti serve una versione compatta)
 
-> Costruisci un'app mobile React Native/Expo (iOS+Android, TypeScript strict,
-> monorepo) per giocare a giochi di ruolo da tavolo in remoto, con UX da app di
-> messaggistica. Funzioni: (1) chat di gruppo realtime offline-first per campagna;
-> (2) messaggi vocali trascritti automaticamente in chat, con glossario di campagna e
-> trascrizione editabile; (3) riproduzione del messaggio con voci di personaggio
-> selezionabili (orco, nano, elfo, umano) tramite modulazione DSP on-device come
-> default e TTS cloud come opzione, dietro un'unica interfaccia `VoiceTransform`;
+> Costruisci un'app mobile **Android** in React Native/Expo (TypeScript strict,
+> monorepo, un solo modulo nativo in Kotlin) per giocare a giochi di ruolo da tavolo
+> in remoto, con UX da app di messaggistica. **Vincolo economico vincolante: costo
+> operativo totale ≤ 20 €/mese**, che impone motori vocali on-device come default e
+> cloud solo come opzione contabilizzata con degrado automatico a costo zero.
+> Funzioni: (1) chat di gruppo realtime offline-first per campagna, ordinamento
+> deterministico lato server e outbox persistente;
+> (2) messaggi vocali trascritti automaticamente in chat (solo trascrizione italiana,
+> nessuna traduzione): STT di sistema Android come default gratuito, STT cloud opt-in
+> con glossario di campagna entro budget, trascrizione sempre correggibile a mano;
+> (3) riproduzione con voci di personaggio selezionabili (orco, nano, elfo, umano)
+> tramite catena DSP nativa (pitch e formant shift su Oboe) applicata alla voce
+> registrata o al TTS di sistema, più TTS cloud commodity come opzione, dietro
+> un'unica interfaccia `VoiceTransform`;
 > (4) tiri di dado con notazione completa (`4d6kh3`, `2d20kh1`, modificatori, reroll,
 > exploding), RNG autoritativo server-side verificabile via commit/reveal del seed, e
 > animazione 3D che converge sul risultato già deciso dal server, con alternativa
-> non animata; (5) allegati immagine e video con compressione, strip EXIF e URL
-> firmati. Distribuzione **privata a invito** (APK sideload su Android, TestFlight o
-> ad hoc su iOS): nessuna pubblicazione sugli store, quindi niente apparato di
-> moderazione UGC, ma schema dati predisposto per aggiungerlo. Vincoli: chiavi AI solo
-> server-side, RLS + check applicativi, consenso esplicito e revocabile
-> sull'elaborazione cloud della voce con fallback offline funzionante, nessun marchio
-> o contenuto Wizards of the Coast, i18n it/en, accessibilità AA. Lavora a sprint di
-> 2 settimane: a ogni fine sprint build
-> installabile, metriche misurate, ADR, scostamenti dal piano e stop per validazione.
+> non animata; (5) allegati immagine e video con compressione, strip EXIF, URL
+> firmati, retention automatica e object storage senza costi di egress.
+> Distribuzione **privata a invito via APK**: nessuna pubblicazione sugli store,
+> quindi niente apparato di moderazione UGC, ma schema dati predisposto per
+> aggiungerlo senza migrazione distruttiva. Vincoli: chiavi AI solo server-side,
+> budget guard server-side verificato prima di ogni chiamata a pagamento, RLS +
+> check applicativi, consenso esplicito e revocabile sull'elaborazione cloud della
+> voce con fallback offline pienamente funzionante, rilevamento a runtime delle
+> capacità vocali del device (la frammentazione Android e' un rischio alto), nessun
+> marchio o contenuto Wizards of the Coast, i18n it/en, accessibilità AA. Lavora a
+> sprint di 2 settimane: a ogni fine sprint build installabile, metriche misurate,
+> ADR, scostamenti dal piano e stop per validazione.
 > Prima di scrivere codice: domande bloccanti, piano Sprint 0 con spike misurati e
 > tabella costi verificata.
 
 ## Appendice D — Cosa NON promettere al committente
 
-- Modulazione vocale realistica in tempo reale a costo zero: o è DSP (economico,
-  effetto scenico) o è cloud (credibile, con latenza e costo per minuto).
-- Trascrizione accurata sui nomi propri fantasy senza glossario e senza correzione manuale.
+- Modulazione vocale realistica a costo zero: con 20 €/mese si ottiene un effetto
+  scenico convincente (DSP), non il timbro di un doppiatore. La conversione
+  speech-to-speech, che avrebbe conservato la recitazione, è esclusa per budget.
+- Trascrizione accurata sui nomi propri fantasy col solo motore on-device: il motore
+  di sistema non accetta glossari personalizzati. La correzione a mano è parte del
+  flusso, non un ripiego.
+- Che l'app suoni e si comporti allo stesso modo su tutti gli Android: i motori
+  vocali di sistema cambiano per produttore e versione.
 - Animazione 3D fluida su qualunque Android senza un budget di performance e un fallback.
-- Che la distribuzione privata renda il progetto "piccolo": taglia circa uno sprint
-  su otto. Il costo sta nella pipeline audio, nel realtime e nell'animazione.
-- Che su iOS si installi l'app agli amici senza iscrizione a pagamento al programma
-  sviluppatori Apple.
+- Che distribuzione privata e Android-only rendano il progetto "piccolo": insieme
+  tagliano circa uno sprint e mezzo su otto. Il costo sta nella pipeline audio, nel
+  realtime e nell'animazione, che non dipendono da quelle scelte.
 - Una v1 in "qualche settimana": il numero onesto è ~4 mesi per un senior; primo
   build davvero giocabile (chat + dadi) a ~8 settimane.
