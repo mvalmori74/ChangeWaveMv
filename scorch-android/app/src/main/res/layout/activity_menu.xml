@@ -106,6 +106,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_primary"
+                    android:buttonTint="@color/accent"
                     android:text="Recluta" />
 
                 <RadioButton
@@ -115,6 +116,7 @@
                     android:layout_marginStart="10dp"
                     android:checked="true"
                     android:textColor="@color/text_primary"
+                    android:buttonTint="@color/accent"
                     android:text="Veterano" />
 
                 <RadioButton
@@ -123,6 +125,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
                     android:textColor="@color/text_primary"
+                    android:buttonTint="@color/accent"
                     android:text="Cyborg" />
             </RadioGroup>
 
@@ -133,6 +136,7 @@
                 android:layout_marginTop="6dp"
                 android:checked="true"
                 android:textColor="@color/text_primary"
+                android:buttonTint="@color/accent"
                 android:text="@string/wind" />
 
             <TextView

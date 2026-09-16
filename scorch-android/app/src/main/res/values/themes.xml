@@ -1,16 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Scorch" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <!--
+        Tema sempre scuro: tutti i colori del gioco sono scelti per uno sfondo scuro.
+        Importante: NON impostare 'android:textColor' qui, perche' e' un override globale
+        che verrebbe ereditato anche dai dialog di sistema, rendendo il testo chiaro
+        illeggibile sul loro sfondo.
+    -->
+    <style name="Theme.Scorch" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/bg_dark</item>
         <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryDark">@color/bg_dark</item>
         <item name="colorAccent">@color/accent</item>
-        <item name="android:textColorPrimary">@color/text_primary</item>
-        <item name="android:textColor">@color/text_primary</item>
+        <item name="alertDialogTheme">@style/Theme.Scorch.Dialog</item>
+        <item name="android:alertDialogTheme">@style/Theme.Scorch.Dialog</item>
     </style>
 
-    <style name="Theme.Scorch.Dialog" parent="Theme.AppCompat.DayNight.Dialog.Alert">
+    <style name="Theme.Scorch.Dialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_muted</item>
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Theme.Scorch.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Theme.Scorch.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Theme.Scorch.DialogButton</item>
+    </style>
+
+    <style name="Theme.Scorch.DialogButton" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/accent</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
 </resources>

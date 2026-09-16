@@ -1,10 +1,10 @@
 package com.changewave.scorch
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -129,7 +129,7 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener {
     }
 
     private fun showScoreboard(world: GameWorld, title: String, onClose: () -> Unit) {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_Scorch_Dialog)
             .setTitle(title)
             .setMessage(scoreText(world))
             .setCancelable(false)
@@ -144,7 +144,7 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener {
     private fun showFinalDialog(world: GameWorld) {
         val standings = world.standings()
         val champion = standings.firstOrNull()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_Scorch_Dialog)
             .setTitle(if (champion != null) "Vince ${champion.name}!" else "Partita conclusa")
             .setMessage(scoreText(world))
             .setCancelable(false)
@@ -166,7 +166,7 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener {
         view.hud.closePanels()
         view.hud.clearPointers()
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_Scorch_Dialog)
             .setTitle("Pausa")
             .setMessage(scoreText(view.world))
             .setCancelable(false)

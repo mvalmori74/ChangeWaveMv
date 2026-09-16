@@ -1,7 +1,6 @@
 package com.changewave.scorch.ui
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.graphics.Color
 import android.view.Gravity
 import android.view.View
@@ -9,6 +8,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import com.changewave.scorch.R
 import com.changewave.scorch.game.ShopItem
 import com.changewave.scorch.game.Tank
 import com.changewave.scorch.game.Weapon
@@ -25,7 +26,6 @@ object ShopDialog {
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(4))
-            setBackgroundColor(Color.rgb(16, 22, 40))
         }
 
         val money = TextView(activity).apply {
@@ -44,11 +44,13 @@ object ShopDialog {
         val list = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
+        // in orizzontale lo schermo e' basso: la lista non deve coprire i pulsanti del dialog
+        val maxListHeight = minOf(dp(320), (activity.resources.displayMetrics.heightPixels * 0.45f).toInt())
         val scroll = ScrollView(activity).apply {
             addView(list)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(320)
+                maxListHeight
             )
         }
         root.addView(scroll)
@@ -83,6 +85,9 @@ object ShopDialog {
             val button = Button(activity).apply {
                 text = "$$cost"
                 setAllCaps(false)
+                setBackgroundColor(Color.rgb(255, 179, 71))
+                setTextColor(Color.rgb(26, 16, 6))
+                minWidth = dp(84)
             }
             button.setOnClickListener {
                 if (canBuy()) {
@@ -152,7 +157,7 @@ object ShopDialog {
 
         refresh()
 
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = AlertDialog.Builder(activity, R.style.Theme_Scorch_Dialog)
             .setTitle("Negozio — ${tank.name}")
             .setView(root as View)
             .setCancelable(false)
