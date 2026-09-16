@@ -30,6 +30,19 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         const val MAX_SPEED = 1500f
         const val WIND_ACCEL = 140f
         const val MOVE_SPEED = 70f
+
+        /** Pendenza superata senza sforzo (1.5 ≈ 56°). */
+        const val MAX_CLIMB_SLOPE = 1.5f
+
+        /** Raggio entro cui il carro "vede" l'ostacolo da scalare. */
+        const val CLIMB_LOOKAHEAD = 30f
+
+        /** Dislivello massimo scalabile su parete ripida: piu' in alto di cosi' si resta intrappolati. */
+        const val MAX_CLIMB_HEIGHT = 105f
+
+        /** Da quanto e' profonda una conca perche' l'IA provi a uscirne. */
+        const val PIT_DEPTH = 26f
+
         const val KILL_BONUS = 6_000
         const val SURVIVOR_BONUS = 8_000
         const val MONEY_PER_DAMAGE = 60
@@ -110,6 +123,10 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     var paused = false
 
     var shake = 0f
+        private set
+
+    /** Secondi residui dell'avviso "pendenza troppo ripida" mostrato dalla HUD. */
+    var blockedHint = 0f
         private set
 
     private var firstPlayerOfRound = 0
@@ -272,7 +289,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         }
         val t = currentTank
         t.ensureValidWeapon()
-        t.fuel = min(Tank.MAX_FUEL, t.fuel + 12f) // piccola ricarica a inizio turno
+        t.fuel = min(Tank.MAX_FUEL, t.fuel + 25f) // ricarica a inizio turno
         aiThinkTimer = 0.8f + rnd.nextFloat() * 0.5f
         state = State.TURN_START
         if (announce) showBanner("Turno di ${t.name}", 0.9f) else bannerTimer = 0.35f
@@ -309,18 +326,60 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         t.power = (len / 330f * Tank.MAX_POWER).coerceIn(50f, Tank.MAX_POWER)
     }
 
-    fun moveTank(dir: Int, dt: Float) {
-        if (!waitingForHumanInput) return
-        val t = currentTank
-        if (t.fuel <= 0f) return
+    fun moveTank(dir: Int, dt: Float): Boolean {
+        if (!waitingForHumanInput) return false
+        return driveTank(currentTank, dir, dt)
+    }
+
+    /**
+     * Sposta un carro lungo il terreno. Le salite dolci costano poco carburante; una parete
+     * ripida si puo' comunque scalare, ma solo se la cresta entro il raggio di manovra non e'
+     * troppo alta: da una buca poco profonda si esce, dal cratere di una nuke no.
+     */
+    private fun driveTank(t: Tank, dir: Int, dt: Float): Boolean {
+        if (!t.alive || t.fuel <= 0f) return false
         val step = dir * MOVE_SPEED * dt
         val newX = (t.x + step).coerceIn(40f, worldWidth - 40f)
-        if (abs(newX - t.x) < 0.0001f) return
+        val dist = abs(newX - t.x)
+        if (dist < 0.0001f) return false
+
         val rise = terrain.heightAt(t.x) - terrain.heightAt(newX) // >0 = in salita
-        if (rise / abs(newX - t.x) > 1.1f) return // pendenza troppo ripida
+        val slope = rise / dist
+        if (slope > MAX_CLIMB_SLOPE && crestAhead(t.x, dir) > MAX_CLIMB_HEIGHT) {
+            blockedHint = 1.2f
+            return false
+        }
+
         t.x = newX
         t.y = terrain.heightAt(newX)
-        t.fuel = max(0f, t.fuel - abs(step) * 0.5f)
+        // salire consuma di piu', ma non tanto da rendere impossibile uscire da una buca
+        val effort = 1f + slope.coerceIn(0f, 1f)
+        t.fuel = max(0f, t.fuel - dist * 0.25f * effort)
+        return true
+    }
+
+    /** Quanto e' alta, rispetto al carro, la cresta piu' alta entro il raggio di manovra. */
+    private fun crestAhead(x: Float, dir: Int): Float {
+        val here = terrain.heightAt(x)
+        var crest = 0f
+        var d = 3f
+        while (d <= CLIMB_LOOKAHEAD) {
+            val rise = here - terrain.heightAt(x + dir * d)
+            if (rise > crest) crest = rise
+            d += 3f
+        }
+        return crest
+    }
+
+    /**
+     * Direzione verso cui conviene scappare se il carro e' finito in una buca, 0 se e' allo
+     * scoperto. Serve all'IA per non restare a sparare contro la parete del proprio cratere.
+     */
+    private fun pitEscapeDir(t: Tank): Int {
+        val left = crestAhead(t.x, -1)
+        val right = crestAhead(t.x, 1)
+        if (left < PIT_DEPTH && right < PIT_DEPTH) return 0
+        return if (left <= right) -1 else 1
     }
 
     fun selectWeapon(id: Int) {
@@ -361,6 +420,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         val dt = dtRaw.coerceIn(0f, 0.05f)
 
         if (shake > 0f) shake = max(0f, shake - dt * 26f)
+        if (blockedHint > 0f) blockedHint = max(0f, blockedHint - dt)
         updateEffects(dt)
 
         when (state) {
@@ -373,6 +433,11 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                 val t = currentTank
                 if (!t.isHuman) {
                     aiThinkTimer -= dt
+                    // se e' finito in una conca, prima prova a risalire verso il bordo piu' basso
+                    if (aiThinkTimer > 0.25f && t.fuel > 15f) {
+                        val escape = pitEscapeDir(t)
+                        if (escape != 0) driveTank(t, escape, dt)
+                    }
                     if (aiThinkTimer <= 0f) {
                         val shot = ai.plan(this, t)
                         t.angle = shot.angle

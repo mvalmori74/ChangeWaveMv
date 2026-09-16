@@ -322,7 +322,13 @@ class Hud(private val density: Float) {
         val pow = find(Id.POWER_DEC).rect
         canvas.drawText("POTENZA", pow.left, pow.top - dp(4f), text)
         val mv = find(Id.MOVE_LEFT).rect
-        canvas.drawText("MOVIMENTO (carb. ${t.fuel.toInt()})", mv.left, mv.top - dp(4f), text)
+        if (w.blockedHint > 0f) {
+            text.color = Color.rgb(255, 150, 120)
+            canvas.drawText("PARETE TROPPO ALTA", mv.left, mv.top - dp(4f), text)
+            text.color = Color.argb(180, 180, 195, 220)
+        } else {
+            canvas.drawText("MOVIMENTO (carb. ${t.fuel.toInt()})", mv.left, mv.top - dp(4f), text)
+        }
 
         // barra potenza
         val bar = RectF(

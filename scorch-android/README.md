@@ -19,7 +19,7 @@ sovrastante frana. Chi resta l'ultimo vivo vince il round.
 | Trascinamento sul campo | Mira rapida: la direzione imposta l'angolo, la lunghezza del trascinamento la potenza |
 | ◀ ▶ | Angolo fine (tenendo premuto accelera) |
 | – + | Potenza fine |
-| ◀◀ ▶▶ | Muove il carro (consuma carburante, non risale pendenze troppo ripide) |
+| ◀◀ ▶▶ | Muove il carro: scala anche le pareti dei crateri, consumando carburante in proporzione alla salita |
 | ARMA | Apre l'arsenale e cambia munizione |
 | FUOCO | Spara |
 | ☰ | Pausa / classifica / uscita |
@@ -49,6 +49,16 @@ superstite del round).
 Extra fedeli all'originale: reazioni a catena (un carro distrutto esplode e può
 uccidere i vicini), danno da caduta quando il terreno sotto al carro viene scavato,
 frane del terreno, vento variabile a ogni round, quattro palette ambientali.
+
+**Uscire dai crateri.** Finire sul fondo di una buca non è una condanna: il carro
+risale la parete consumando carburante in proporzione alla pendenza (circa 19 unità
+per un cratere da missile baby, 74 per quello di una nuke, su un serbatoio da 100).
+Il carburante si ricarica di 25 a ogni turno e si compra al negozio, quindi da una
+buca profonda si esce in due o tre turni. Restano invalicabili solo le pareti
+naturali davvero a picco (oltre 105 unità di dislivello nel raggio di manovra): in
+quel caso la HUD avvisa con «PARETE TROPPO ALTA» e si può sempre spianare il terreno
+con una palla di terra. Anche l'IA, se finisce in una conca, risale verso il bordo
+più basso prima di sparare.
 
 ## 🤖 IA
 
