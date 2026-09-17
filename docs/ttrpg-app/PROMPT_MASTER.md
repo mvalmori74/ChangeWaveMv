@@ -187,16 +187,24 @@ reggono a costo zero (A+B) e per quali il cloud vale davvero la spesa.
   converge sulla faccia predeterminata*. Non derivare mai il risultato dalla fisica
   (non deterministica tra device). Implementazione: dadi 3D (d4/d6/d8/d10/d12/d20/d100)
   con GPU, ombre, materiali, impatto con haptics + SFX, durata 1,2–1,8 s, `skip` al tap.
-- **Rispetta `prefers-reduced-motion`**: alternativa non animata obbligatoria (vincolo
-  di accessibilità, non un nice-to-have).
+- **Tre livelli di resa** agganciati alla fascia di prestazioni di §4-ter
+  (`high` / `medium` / `low`), con override manuale dell'utente.
+- **Rispetta la preferenza di sistema per l'animazione ridotta**: alternativa non
+  animata obbligatoria (vincolo di accessibilità, non un nice-to-have). È una cosa
+  diversa dalla fascia `low`: qui l'animazione si salta per scelta dell'utente, lì
+  per limiti del device.
 - Tiri privati del GM (visibili solo a lui, ma comunque loggati e verificabili).
 - Test statistico: chi-quadro su 10^6 tiri per ogni tipo di dado, in CI.
 
-**AC**: animazione a 60 fps su device di riferimento basso (vedi §13-D6); se non
-raggiungibile, degradazione documentata a 30 fps o a sprite pre-renderizzati.
+**AC**: 60 fps in fascia `high` e almeno 30 fps stabili in `medium`, misurati sui
+device reali del gruppo (§4-ter); dove non raggiungibile, la fascia declassa
+automaticamente e il fatto compare in telemetria.
 
 ### F6 — Allegati media
 - Immagini (mappe, handout, ritratti) e video brevi, da camera o galleria.
+- **Selezione tramite photo picker di sistema** (§4-ter): con la baseline API 33
+  questo evita di chiedere qualunque permesso sui media. Il permesso fotocamera resta
+  necessario solo per lo scatto diretto, e va chiesto nel momento in cui serve.
 - Compressione client-side prima dell'upload, **strip EXIF/GPS**, generazione
   thumbnail, upload resumibile con progress e retry, cancellazione.
 - Limiti espliciti e comunicati, **derivati dal budget di §4-bis e non scelti a
@@ -217,7 +225,12 @@ raggiungibile, degradazione documentata a 30 fps o a sprite pre-renderizzati.
   (vedi §4-bis): con i video, l'egress è la voce che sorprende.
 
 ### F7 — Notifiche push
-- APNs/FCM per nuovo messaggio, menzione, inizio sessione, tiro del GM.
+- FCM per nuovo messaggio, menzione, inizio sessione, tiro del GM. Nessun APNs:
+  niente iOS (§13-D5).
+- **Permesso runtime per le notifiche obbligatorio** su questa baseline (§4-ter):
+  chiedilo quando l'utente entra nel primo tavolo, spiegando a cosa serve. Se negato,
+  l'app resta usabile e lo stato è visibile nelle impostazioni, con un percorso per
+  concederlo dopo.
 - Impostazioni per tavolo: tutti / solo menzioni / muto (con muto temporizzato).
 - Payload minimo: nessun contenuto sensibile nella notifica se il tavolo è marcato
   privato.
@@ -276,12 +289,16 @@ target touch ≥ 44 pt, navigazione da tastiera esterna.
 | Vocale: fine registrazione → trascrizione visibile | p95 < 4 s per 30 s di audio | telemetria |
 | TTS locale: richiesta → primo byte audio | p95 < 300 ms | telemetria |
 | TTS cloud: richiesta → primo byte audio | p95 < 800 ms | telemetria |
-| Animazione dado | 60 fps target, 30 fps floor | profiler su device di riferimento |
+| Animazione dado | 60 fps in fascia `high`, 30 fps floor in `medium`, fallback in `low` (§4-ter) | profiler sul device più debole del gruppo |
 | Crash-free sessions | ≥ 99,5 % | Sentry |
 | **Costo totale mensile (fisso + variabile)** | **≤ 20 €** (§4-bis) | dashboard costi per feature, allarme a 16 € |
 | Costo marginale con budget esaurito | **0 €** (degrado a Tier 0) | test del budget guard |
 | Occupazione storage a regime | entro il tier gratuito scelto | job di retention + metrica |
-| Consumo batteria sessione 3 h | ≤ 25 % su device di riferimento | misura manuale documentata |
+| Consumo batteria sessione 3 h | ≤ 25 % sul device più debole del gruppo | misura manuale documentata |
+
+**Device di riferimento** (§13-D6, dettaglio in §4-ter): Android 13 / API 33 come
+minimo, device usciti dal 2023. I target sopra si misurano **sul telefono più debole
+effettivamente in uso nel gruppo**, non su un modello ipotetico e non sull'emulatore.
 
 ---
 
@@ -413,6 +430,63 @@ costo_fisso      = hosting + DB + eventuale tier a pagamento
 - **Test automatico del degrado**: con budget simulato esaurito, l'app deve restare
   pienamente funzionale a costo zero. È un test di accettazione, non una prova manuale.
 
+### §4-ter — Baseline device: cosa significa "dal 2023 in poi" in pratica
+
+Decisione §13-D6. L'anno di uscita non è una condizione verificabile: va tradotto in
+due criteri distinti, perché **fissa il piano software ma non quello hardware**.
+
+**1) Piano software — questo sì che è garantito.** Un device uscito nel 2023 è nato
+con Android 13 (API 33) o superiore, e nel 2026 ha verosimilmente ricevuto
+aggiornamenti oltre. Fissa quindi `minSdk = 33`, `targetSdk` all'ultimo stabile.
+Verifica ognuno dei punti seguenti in S0 prima di farci affidamento:
+- **Permessi media granulari** (`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO`) al posto del
+  vecchio permesso di storage. Meglio ancora: usare il **photo picker di sistema**,
+  che per F6 consente di **non chiedere affatto un permesso sui media**. Fallo: è
+  meno codice, meno attrito per i giocatori e meno superficie di privacy.
+- **Permesso runtime per le notifiche** (`POST_NOTIFICATIONS`): da API 33 è
+  obbligatorio chiederlo. Per F7 significa progettare il *momento* della richiesta
+  (dopo che l'utente è entrato in un tavolo, non al primo avvio, o verrà negato).
+- **Riconoscimento vocale on-device**: l'API dedicata esiste da prima di API 33,
+  quindi con questa baseline è **presente per certo**. Attenzione alla distinzione che
+  conta: *API presente* ≠ *modello italiano scaricato sul device*. Il rilevamento a
+  runtime e il fallback di F3 restano necessari.
+- **Preferenza di lingua per-app** disponibile a livello di sistema: usala per l'i18n
+  invece di reinventarla.
+- **Tipi di foreground service**: le versioni di Android successive richiedono di
+  dichiarare il tipo di servizio in primo piano. Se la registrazione audio deve
+  sopravvivere allo schermo spento, questo ti riguarda: dichiaralo correttamente e
+  testalo, non scoprirlo quando un vocale si tronca a metà.
+- **Allineamento delle pagine di memoria a 16 KB**: le versioni recenti di Android
+  girano su device con pagine da 16 KB e le librerie native devono essere compilate di
+  conseguenza. Ti riguarda direttamente, perché hai un **modulo nativo audio** (F4) e
+  librerie native di terze parti. **Verificalo in S0 con una build su un device
+  aggiornato**: è il tipo di problema che si manifesta come crash all'avvio, non come
+  warning di compilazione.
+
+**2) Piano hardware — questo NON è garantito, ed è l'errore da non fare.** Un telefono
+economico del 2023 è più lento di un telefono di fascia alta del 2021: l'anno fissa il
+sistema operativo, non la GPU. Per l'animazione 3D dei dadi (F5) e per la batteria,
+quindi, **non classificare per anno ma per capacità misurata a runtime**:
+
+- Al primo avvio determina una **fascia di prestazioni** (`high` / `medium` / `low`)
+  combinando RAM disponibile, numero e classe dei core, versione delle API grafiche e
+  — se necessario — un micro-benchmark di rendering di durata trascurabile eseguito
+  una sola volta e memorizzato.
+- Mappa: `high` → animazione 3D completa con ombre e materiali; `medium` → animazione
+  3D semplificata (niente ombre dinamiche, meno campioni); `low` → sprite
+  pre-renderizzati o fallback non animato.
+- L'utente deve poter **forzare la fascia** dalle impostazioni, in entrambe le
+  direzioni. Chi ha un device potente e vuole risparmiare batteria durante una
+  sessione di 4 ore ha ragione quanto chi vuole l'effetto pieno.
+- La fascia scelta e le sue conseguenze vanno in telemetria: serve per capire, dopo
+  la prima sessione reale, se la classificazione ha indovinato.
+
+**Conseguenza sul piano.** Questa baseline **riduce** il rischio di frammentazione
+(§7.2) ma non lo annulla: motori vocali e voci TTS di sistema restano diversi tra
+produttori anche su Android recenti. Sul calendario non cambia nulla: si risparmiano
+i rami di compatibilità legacy, si spende in device tiering. Considerala una
+riduzione di rischio, non un anticipo di consegna.
+
 ---
 
 ## 5. Architettura richiesta
@@ -473,11 +547,17 @@ Apri `docs/risks.md` e mantienilo aggiornato. Partenza obbligatoria:
    opt-in entro budget, e **misurazione nello Sprint 0 prima di costruirci sopra**.
    Se lo spike dà esito negativo, l'alternativa onesta è dichiarare la trascrizione
    "assistita" (bozza da correggere) invece che automatica.
-2. **[ALTO] Frammentazione Android su STT e TTS di sistema** (§4): motori, voci e
-   pacchetti lingua cambiano per produttore e versione. Un preset che suona bene sul
-   tuo device può non esistere su quello di un giocatore. Mitigazione: rilevamento
-   capacità a runtime, degrado esplicito, matrice device reale in `docs/devices.md`,
-   test sui device effettivi del gruppo — non sull'emulatore.
+2. **[MEDIO-ALTO, ridotto da §13-D6] Frammentazione Android su STT e TTS di
+   sistema** (§4, §4-ter): la baseline API 33 elimina i rami legacy, ma **non**
+   uniforma i motori vocali: voci TTS disponibili e presenza del modello italiano
+   offline continuano a dipendere da produttore e configurazione del device.
+   Mitigazione: rilevamento capacità a runtime, degrado esplicito, matrice device
+   reale in `docs/devices.md`, test sui device effettivi del gruppo — mai
+   sull'emulatore, che ha un corredo vocale non rappresentativo.
+2-bis. **[MEDIO] Librerie native e pagine di memoria da 16 KB** (§4-ter): con un
+   modulo audio nativo, un allineamento sbagliato si manifesta come crash all'avvio
+   sui device Android più recenti, non come errore di build. Verifica in S0 su un
+   device aggiornato, non in emulatore.
 3. **[MEDIO] Tetto di 20 €/mese** (§4-bis): un errore di stima sui prezzi unitari, o
    una retention non implementata, fa saltare il budget in silenzio. Mitigazione:
    budget guard server-side con verifica *prima* della chiamata, degrado automatico a
@@ -564,7 +644,7 @@ sprint sfora, **non comprimere la qualità**: riporta lo scostamento e rinegozia
 
 | Sprint | Tema | Contenuto | Esito atteso |
 |---|---|---|---|
-| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, keystore, APK installato sui **device reali del gruppo**, tabella costi §4-bis con prezzi verificati, **spike misurati**: STT Tier 0 vs Tier 1 su clip fantasy italiane, TTS di sistema + DSP vs TTS cloud, catena DSP Kotlin, 3D dadi e batteria sul device più debole; verifica licenze §8 e della libreria di pitch shifting | Decisioni provider chiuse con numeri; **verdetto esplicito: il Tier 0 basta o no** |
+| **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, keystore, APK installato sui **device reali del gruppo**, `minSdk 33` + classificatore di fascia (§4-ter), verifica dell'allineamento a 16 KB delle librerie native, tabella costi §4-bis con prezzi verificati, **spike misurati**: STT Tier 0 vs Tier 1 su clip fantasy italiane, TTS di sistema + DSP vs TTS cloud, catena DSP Kotlin, 3D dadi e batteria sul device più debole; verifica licenze §8 e della libreria di pitch shifting | Decisioni provider chiuse con numeri; **verdetto esplicito: il Tier 0 basta o no** |
 | **S1** | Auth + tavoli + chat | F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) + push base "nuovo messaggio" | Il gruppo può già usarla come chat e darti feedback da qui in avanti |
 | **S2** | Motore dadi | F5 parser + RNG verificabile + messaggio strutturato + test statistici e di sicurezza | Tiri corretti, provabili, non falsificabili |
 | **S3** | Scenografia dadi | F5 animazione 3D, haptics, SFX, fallback ridotto/sprite, budget performance | L'effetto "wow" senza jank |
@@ -586,6 +666,11 @@ on-device non regge sulla narrazione fantasy italiana e il cloud non sta nel bud
 ridefinire la trascrizione come bozza da correggere a mano, (c) limitare la
 trascrizione ai messaggi brevi. Non scegliere da solo e non proseguire come se il
 problema non esistesse.
+
+**Effetto di §13-D6 sul piano**: nessuno sul calendario. La baseline 2023+ toglie i
+rami di compatibilità legacy e li sostituisce con il device tiering di §4-ter: è uno
+scambio quasi alla pari in costo, ma **riduce il rischio**, che è il motivo per cui è
+una buona decisione. Diffida di chi te la vende come un anticipo di consegna.
 
 **Stima onesta**: 8 sprint = **16 settimane / ~4 mesi calendario** per un singolo
 senior a tempo pieno. L'Android-only fa risparmiare attrito reale (un solo modulo
@@ -631,13 +716,13 @@ Per ognuna è indicato il **default** che adotterò se non rispondi.
   **Requisito operativo aperto**: serve l'elenco reale dei device Android del gruppo
   di gioco (modello e versione Android) da mettere in `docs/devices.md`. Senza quello
   non si può fissare il target di performance né verificare i motori vocali.
-- **D6 — Device Android di riferimento minimo?** *(ultima decisione tecnica aperta:
-  da essa dipendono tutti i target di §3, il budget di performance
-  dell'animazione 3D e la misura di batteria)*
-  Default: **Android 11+ su fascia media del 2021** (SoC classe Snapdragon 6xx,
-  4 GB RAM, GPU Adreno 6xx). Tutto ciò che sta sotto questa soglia riceve
-  automaticamente il fallback non animato dei dadi.
-  Rispondi con i modelli veri dei device del gruppo e il default viene sostituito.
+- **D6 — Device Android di riferimento minimo?** → **DECISO: device usciti dal 2023
+  in poi.** Tradotto in criteri verificabili in §4-ter, perché "anno di uscita" non è
+  interrogabile a runtime: quello che il codice può leggere è il livello di API, il
+  SoC, la RAM e le capacità GPU.
+  **Resta da raccogliere** (non blocca S0, serve entro S1): l'elenco reale dei device
+  del gruppo in `docs/devices.md`, per sapere su cosa si testa davvero e quale fascia
+  di prestazioni è effettivamente rappresentata.
 - **D7 — Dimensione del tavolo e durata sessione tipica** (serve per dimensionare
   fan-out e costi).
   Default: 6 membri, 3 ore, 2 sessioni/settimana per tavolo.
@@ -706,8 +791,8 @@ un risultato** (test di sicurezza dedicato).
 ## Appendice C — Prompt breve (se ti serve una versione compatta)
 
 > Costruisci un'app mobile **Android** in React Native/Expo (TypeScript strict,
-> monorepo, un solo modulo nativo in Kotlin) per giocare a giochi di ruolo da tavolo
-> in remoto, con UX da app di messaggistica. **Vincolo economico vincolante: costo
+> monorepo, un solo modulo nativo in Kotlin, `minSdk 33` — device dal 2023 in poi)
+> per giocare a giochi di ruolo da tavolo in remoto, con UX da app di messaggistica. **Vincolo economico vincolante: costo
 > operativo totale ≤ 20 €/mese**, che impone motori vocali on-device come default e
 > cloud solo come opzione contabilizzata con degrado automatico a costo zero.
 > Funzioni: (1) chat di gruppo realtime offline-first per campagna, ordinamento
@@ -721,8 +806,9 @@ un risultato** (test di sicurezza dedicato).
 > un'unica interfaccia `VoiceTransform`;
 > (4) tiri di dado con notazione completa (`4d6kh3`, `2d20kh1`, modificatori, reroll,
 > exploding), RNG autoritativo server-side verificabile via commit/reveal del seed, e
-> animazione 3D che converge sul risultato già deciso dal server, con alternativa
-> non animata; (5) allegati immagine e video con compressione, strip EXIF, URL
+> animazione 3D che converge sul risultato già deciso dal server, resa su tre fasce
+> di prestazioni classificate a runtime (l'anno del device fissa il sistema operativo,
+> non la GPU) e alternativa non animata sempre disponibile; (5) allegati immagine e video con compressione, strip EXIF, URL
 > firmati, retention automatica e object storage senza costi di egress.
 > Distribuzione **privata a invito via APK**: nessuna pubblicazione sugli store,
 > quindi niente apparato di moderazione UGC, ma schema dati predisposto per
@@ -746,7 +832,10 @@ un risultato** (test di sicurezza dedicato).
   di sistema non accetta glossari personalizzati. La correzione a mano è parte del
   flusso, non un ripiego.
 - Che l'app suoni e si comporti allo stesso modo su tutti gli Android: i motori
-  vocali di sistema cambiano per produttore e versione.
+  vocali di sistema cambiano per produttore e configurazione, anche a parità di
+  versione recente.
+- Che "telefoni recenti" significhi "telefoni potenti": un entry-level del 2023 rende
+  meno di un top di gamma del 2021. La baseline fissa le API, non le prestazioni.
 - Animazione 3D fluida su qualunque Android senza un budget di performance e un fallback.
 - Che distribuzione privata e Android-only rendano il progetto "piccolo": insieme
   tagliano circa uno sprint e mezzo su otto. Il costo sta nella pipeline audio, nel
