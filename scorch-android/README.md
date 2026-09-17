@@ -60,6 +60,32 @@ quel caso la HUD avvisa con «PARETE TROPPO ALTA» e si può sempre spianare il 
 con una palla di terra. Anche l'IA, se finisce in una conca, risale verso il bordo
 più basso prima di sparare.
 
+## 📶 Partita a due via Bluetooth
+
+Dal menu, **GIOCA IN DUE (BLUETOOTH)**: un telefono preme *Ospita* (diventa visibile per
+3 minuti), l'altro preme *Cerca avversari* e lo sceglie dall'elenco — i dispositivi già
+accoppiati compaiono subito. Chi ospita comanda il carro rosso e decide le impostazioni
+della partita (round, vento, denaro); chi si unisce comanda il blu.
+
+Il collegamento è **Bluetooth classico (RFCOMM)**, senza internet né server.
+
+**Come resta sincronizzata la partita.** Sulla rete viaggia pochissimo: la mossa completa
+del giocatore di turno (posizione finale, carburante, angolo, potenza, arma), gli acquisti
+fatti al negozio e, a fine turno, una fotografia dello stato inviata da chi ospita. Tutto
+il resto è ricalcolato in locale, perché la simulazione è **deterministica**: il motore usa
+tre generatori casuali separati, e quelli che contano dipendono solo da seme, round e
+numero di turno — mentre le particelle e gli effetti grafici hanno un generatore libero che
+non può spostare di un millimetro l'esito di un tiro. La fotografia dell'host è quindi solo
+una rete di sicurezza contro le minime differenze in virgola mobile fra chip diversi, e
+viene applicata solo a turno concluso per non tagliare l'animazione.
+
+Se il collegamento cade la partita si ferma con un avviso; la mossa dell'avversario che
+arriva mentre l'animazione precedente è ancora in corso viene messa in coda, non persa.
+
+**Permessi:** su Android 12+ servono *Dispositivi nelle vicinanze* (`BLUETOOTH_CONNECT`,
+`BLUETOOTH_SCAN`), su Android 7-11 il permesso di posizione, richiesto solo per la ricerca
+dei dispositivi come impone il sistema.
+
 ## 🤖 IA
 
 Tre livelli (`Recluta`, `Veterano`, `Cyborg`). L'IA risolve la balistica in forma
@@ -99,6 +125,11 @@ app/src/main/java/com/changewave/scorch/
 │   ├── AiBrain.kt           risolutore balistico e mira dell'IA
 │   ├── AiShopper.kt         acquisti automatici dell'IA
 │   └── GameSettings.kt      impostazioni partita (Parcelable)
+├── BluetoothLobbyActivity.kt  ricerca dispositivi, permessi e handshake
+├── net/
+│   ├── Protocol.kt          pacchetti binari (mossa, acquisti, snapshot)
+│   ├── BluetoothLink.kt     socket RFCOMM, thread di lettura, riconnessione
+│   └── NetSession.kt        tiene vivo il collegamento fra le schermate
 └── ui/
     ├── GameView.kt          SurfaceView + game loop su thread dedicato
     ├── Hud.kt               controlli touch e pannelli disegnati su Canvas
@@ -119,9 +150,15 @@ Il codice del motore è stato compilato (Kotlin 1.9.24, zero errori e zero warni
 fatto girare **headless** con stub delle API grafiche:
 
 - 6 partite complete IA-contro-IA (2/3/4 giocatori, tutte le difficoltà, con e senza
-  vento): 12 round, 246 turni, nessun blocco, nessun NaN, 65% di tiri a segno
+  vento): 12 round, 237 turni, nessun blocco, nessun NaN, 67% di tiri a segno
 - tutte e 9 le armi sparate e verificate su terreno e carri (esplosione, frammenti,
   divisione MIRV, rotolamento, scavo, deposito di terra)
+- uscita dai crateri su terreno piano, con il costo in carburante misurato
+- **partita Bluetooth**: due istanze del gioco che comunicano solo con i pacchetti veri
+  del protocollo giocano 176 turni e 9 round restando identiche (terreno, vita, carburante,
+  inventari). La prova è stata ripetuta disattivando le fotografie di sincronizzazione: con
+  **zero** correzioni scambiate i due mondi restano comunque allineati, quindi la
+  determinicità regge da sola
 
 L'APK di debug viene costruito automaticamente da GitHub Actions
 (`.github/workflows/scorchwave-android.yml`) a ogni push che tocca `scorch-android/`:

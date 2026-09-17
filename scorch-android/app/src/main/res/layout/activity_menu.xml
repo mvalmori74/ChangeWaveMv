@@ -166,6 +166,14 @@
             android:textStyle="bold"
             android:text="@string/start" />
 
+        <Button
+            android:id="@+id/buttonBluetooth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textStyle="bold"
+            android:text="@string/bluetooth_play" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

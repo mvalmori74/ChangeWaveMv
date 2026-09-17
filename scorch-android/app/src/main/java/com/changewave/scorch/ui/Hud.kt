@@ -208,6 +208,7 @@ class Hud(private val density: Float) {
         drawTopBar(canvas, w, t)
         drawControls(canvas, w, t)
         if (weaponPanelOpen) drawWeaponPanel(canvas, t)
+        drawRemoteWait(canvas, w)
         drawBanner(canvas, w)
     }
 
@@ -405,6 +406,19 @@ class Hud(private val density: Float) {
         text.textSize = dp(11f)
         text.color = Color.argb(190, 180, 195, 220)
         canvas.drawText("tocca fuori dal pannello per chiudere", panelRect.centerX(), panelRect.bottom - dp(14f), text)
+    }
+
+    private fun drawRemoteWait(canvas: Canvas, w: GameWorld) {
+        if (!w.waitingForRemote) return
+        val name = w.settings.remoteName.ifEmpty { "avversario" }
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(160, 8, 12, 24)
+        rect.set(width * 0.5f - dp(150f), height * 0.5f - dp(26f), width * 0.5f + dp(150f), height * 0.5f + dp(16f))
+        canvas.drawRoundRect(rect, dp(10f), dp(10f), paint)
+        text.textAlign = Paint.Align.CENTER
+        text.textSize = dp(16f)
+        text.color = Color.rgb(255, 200, 120)
+        canvas.drawText("Turno di $name…", width * 0.5f, height * 0.5f, text)
     }
 
     private fun drawBanner(canvas: Canvas, w: GameWorld) {

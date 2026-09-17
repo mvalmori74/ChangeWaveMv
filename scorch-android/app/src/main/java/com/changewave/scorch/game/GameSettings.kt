@@ -21,7 +21,19 @@ data class GameSettings(
     val rounds: Int = 3,
     val difficultyOrdinal: Int = Difficulty.VETERAN.ordinal,
     val windEnabled: Boolean = true,
-    val startMoney: Int = 10_000
+    val startMoney: Int = 10_000,
+
+    /** Seme della partita: due dispositivi con lo stesso seme generano lo stesso mondo. */
+    val seed: Long = 0L,
+
+    /** Indice del carro comandato da questo dispositivo; -1 = tutti locali (hot-seat). */
+    val localPlayerIndex: Int = -1,
+
+    /** Questo dispositivo ospita la partita Bluetooth ed e' quindi autorevole sullo stato. */
+    val isHost: Boolean = false,
+
+    /** Nome mostrato per il giocatore remoto. */
+    val remoteName: String = ""
 ) : Parcelable {
 
     val difficulty: Difficulty
@@ -29,4 +41,6 @@ data class GameSettings(
             val all = Difficulty.values()
             return all[difficultyOrdinal.coerceIn(0, all.size - 1)]
         }
+
+    val isNetworkGame: Boolean get() = localPlayerIndex >= 0
 }

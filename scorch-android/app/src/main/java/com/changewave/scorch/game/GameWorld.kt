@@ -103,8 +103,16 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     private val particles = ArrayList<Particle>()
     private val texts = ArrayList<FloatingText>()
 
-    private val rnd = Random(System.nanoTime())
-    private val ai = AiBrain(settings.difficulty, rnd)
+    /**
+     * Tre generatori distinti, per rendere la partita riproducibile su due dispositivi:
+     * - [setupRnd] dipende solo da seme e round (terreno, vento, posizioni)
+     * - [turnRnd] dipende solo da seme, round e numero di turno (frammentazioni, mira IA)
+     * - [fxRnd] e' libero perche' governa solo particelle ed effetti visivi
+     */
+    private var setupRnd = Random(0)
+    private var turnRnd = Random(0)
+    private val fxRnd = Random(System.nanoTime())
+    private val ai = AiBrain(settings.difficulty) { turnRnd }
 
     var state = State.TURN_START
         private set
@@ -128,6 +136,24 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     /** Secondi residui dell'avviso "pendenza troppo ripida" mostrato dalla HUD. */
     var blockedHint = 0f
         private set
+
+    /** Seme della partita: identico sui due dispositivi in una partita Bluetooth. */
+    val baseSeed: Long = if (settings.seed != 0L) settings.seed else Random.nextLong()
+
+    /** Numero progressivo di turno dall'inizio della partita. */
+    var turnCounter = 0
+        private set
+
+    /** Mossa appena giocata in locale, da inviare all'avversario. */
+    var onLocalTurn: ((TurnAction) -> Unit)? = null
+
+    /** Stato autorevole da inviare all'avversario a fine turno (solo l'host). */
+    var onStateSync: ((WorldSnapshot) -> Unit)? = null
+
+    /** Lavori arrivati dalla rete, eseguiti sul thread di gioco. */
+    private val fromNetwork = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+    private var pendingSnapshot: WorldSnapshot? = null
+    private var pendingTurn: TurnAction? = null
 
     private var firstPlayerOfRound = 0
     private var aiThinkTimer = 0f
@@ -162,7 +188,15 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     val aliveTanks: List<Tank> get() = tanks.filter { it.alive }
 
     val waitingForHumanInput: Boolean
-        get() = state == State.AIMING && currentTank.isHuman && !paused
+        get() = state == State.AIMING && currentTank.isHuman && !paused && isLocalTurn
+
+    /** In una partita Bluetooth comanda solo il carro assegnato a questo dispositivo. */
+    val isLocalTurn: Boolean
+        get() = !settings.isNetworkGame || currentIndex == settings.localPlayerIndex
+
+    /** True quando si sta aspettando la mossa dell'avversario. */
+    val waitingForRemote: Boolean
+        get() = settings.isNetworkGame && !isLocalTurn && state == State.AIMING
 
     init {
         createTanks()
@@ -206,9 +240,9 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             palette.skyTop, palette.skyBottom, Shader.TileMode.CLAMP
         )
         for (i in starsX.indices) {
-            starsX[i] = rnd.nextFloat() * worldWidth
-            starsY[i] = rnd.nextFloat() * worldHeight * 0.55f
-            starsR[i] = 0.8f + rnd.nextFloat() * 1.6f
+            starsX[i] = fxRnd.nextFloat() * worldWidth
+            starsY[i] = fxRnd.nextFloat() * worldHeight * 0.55f
+            starsR[i] = 0.8f + fxRnd.nextFloat() * 1.6f
         }
         buildHills(hillFarPath, worldHeight * 0.62f, 90f, 5, 0.9f)
         buildHills(hillNearPath, worldHeight * 0.72f, 70f, 3, 1.6f)
@@ -231,12 +265,14 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     }
 
     fun startRound(reset: Boolean) {
+        // il terreno di ogni round dipende solo da seme e numero di round
+        setupRnd = Random(baseSeed * 1_000_003L + round)
         palette = palettes[(round - 1) % palettes.size]
         terrain.palette(palette.dirtTop, palette.dirtBottom, palette.grass)
-        terrain.generate(rnd)
+        terrain.generate(setupRnd)
         buildBackground()
 
-        wind = if (settings.windEnabled) (rnd.nextFloat() * 2f - 1f) else 0f
+        wind = if (settings.windEnabled) (setupRnd.nextFloat() * 2f - 1f) else 0f
 
         projectiles.clear()
         explosions.clear()
@@ -266,11 +302,11 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         val margin = 140f
         val usable = worldWidth - margin * 2f
         val slot = usable / count
-        val order = tanks.indices.shuffled(rnd)
+        val order = tanks.indices.shuffled(setupRnd)
         for ((i, tankIdx) in order.withIndex()) {
             val t = tanks[tankIdx]
             val center = margin + slot * i + slot * 0.5f
-            val jitter = (rnd.nextFloat() * 2f - 1f) * (slot * 0.28f)
+            val jitter = (setupRnd.nextFloat() * 2f - 1f) * (slot * 0.28f)
             t.x = (center + jitter).coerceIn(60f, worldWidth - 60f)
             terrain.flatten(t.x, Tank.HALF_W + 10f)
             t.y = terrain.heightAt(t.x)
@@ -281,6 +317,11 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     }
 
     private fun beginTurn(announce: Boolean) {
+        // la casualita' di gioco del turno (frammentazioni, mira IA) dipende solo dal
+        // numero di turno, non da quante particelle sono state disegnate
+        turnCounter++
+        turnRnd = Random(baseSeed xor (round.toLong() shl 40) xor (turnCounter.toLong() * 7919L))
+
         // salta i carri distrutti
         var guard = 0
         while (!tanks[currentIndex].alive && guard < tanks.size) {
@@ -290,7 +331,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         val t = currentTank
         t.ensureValidWeapon()
         t.fuel = min(Tank.MAX_FUEL, t.fuel + 25f) // ricarica a inizio turno
-        aiThinkTimer = 0.8f + rnd.nextFloat() * 0.5f
+        aiThinkTimer = 0.8f + fxRnd.nextFloat() * 0.5f
         state = State.TURN_START
         if (announce) showBanner("Turno di ${t.name}", 0.9f) else bannerTimer = 0.35f
     }
@@ -394,12 +435,19 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     }
 
     fun fire() {
+        fire(notifyNetwork = true)
+    }
+
+    private fun fire(notifyNetwork: Boolean) {
         if (state != State.AIMING || paused) return
         val t = currentTank
         val w = t.selectedWeapon
         if (!t.hasAmmo(w)) {
             t.selectedWeaponId = Weapons.BABY_MISSILE.id
             return
+        }
+        if (notifyNetwork && settings.isNetworkGame && isLocalTurn) {
+            onLocalTurn?.invoke(TurnAction(t.id, t.x, t.fuel, t.angle, t.power, w.id))
         }
         t.consumeAmmo(w)
         t.lastShotTrail.clear()
@@ -413,11 +461,109 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         state = State.FLYING
     }
 
+    // ---------------------------------------------------------------- rete
+
+    /** Coda i lavori che arrivano dal thread Bluetooth: vengono eseguiti nel game loop. */
+    private fun post(job: () -> Unit) {
+        fromNetwork.add(job)
+    }
+
+    private fun drainNetwork() {
+        while (true) {
+            val job = fromNetwork.poll() ?: break
+            job()
+        }
+        // lo snapshot dell'host si applica solo a turno concluso, per non tagliare l'animazione
+        val snap = pendingSnapshot
+        if (snap != null && (state == State.AIMING || state == State.TURN_START || state == State.ROUND_END)) {
+            pendingSnapshot = null
+            restore(snap)
+        }
+        // la mossa dell'avversario attende che il colpo precedente sia finito
+        val turn = pendingTurn
+        if (turn != null && (state == State.AIMING || state == State.TURN_START)) {
+            pendingTurn = null
+            applyRemoteTurn(turn)
+        }
+    }
+
+    /**
+     * Mossa ricevuta dall'avversario: viene messa in attesa e riprodotta appena questo
+     * dispositivo ha finito di animare il colpo precedente, cosi' non va mai persa.
+     */
+    fun submitRemoteTurn(action: TurnAction) = post {
+        pendingTurn = action
+    }
+
+    private fun applyRemoteTurn(action: TurnAction) {
+        val t = tanks.getOrNull(action.playerIndex) ?: return
+        currentIndex = action.playerIndex
+        t.x = action.x.coerceIn(40f, worldWidth - 40f)
+        t.y = terrain.heightAt(t.x)
+        t.fuel = action.fuel
+        t.angle = action.angle
+        t.power = action.power
+        if (t.hasAmmo(Weapons.byId(action.weaponId))) t.selectedWeaponId = action.weaponId
+        bannerTimer = 0f
+        state = State.AIMING
+        fire(notifyNetwork = false)
+    }
+
+
+    /** Acquisti fatti dall'avversario nel negozio fra un round e l'altro. */
+    fun submitRemoteShop(tankState: TankState) = post {
+        tanks.getOrNull(tankState.index)?.let { tankState.applyPurchasesTo(it) }
+    }
+
+    /** Stato autorevole dell'host: si applica appena il turno locale e' concluso. */
+    fun submitSnapshot(snapshot: WorldSnapshot) = post {
+        pendingSnapshot = snapshot
+    }
+
+    fun snapshot(): WorldSnapshot = WorldSnapshot(
+        round = round,
+        currentIndex = currentIndex,
+        turnCounter = turnCounter,
+        firstPlayerOfRound = firstPlayerOfRound,
+        wind = wind,
+        surface = terrain.surface.copyOf(),
+        tanks = tanks.map { TankState.of(it) }
+    )
+
+    /** Riallinea completamente la partita allo stato ricevuto. */
+    fun restore(snapshot: WorldSnapshot) {
+        round = snapshot.round
+        currentIndex = snapshot.currentIndex.coerceIn(0, tanks.size - 1)
+        turnCounter = snapshot.turnCounter
+        firstPlayerOfRound = snapshot.firstPlayerOfRound
+        wind = snapshot.wind
+        if (snapshot.surface.size == terrain.surface.size) {
+            System.arraycopy(snapshot.surface, 0, terrain.surface, 0, terrain.surface.size)
+            terrain.markDirty()
+        }
+        for (ts in snapshot.tanks) tanks.getOrNull(ts.index)?.let { ts.applyTo(it) }
+        for (t in tanks) {
+            t.falling = false
+            t.vy = 0f
+            t.y = terrain.heightAt(t.x)
+        }
+        projectiles.clear()
+        turnRnd = Random(baseSeed xor (round.toLong() shl 40) xor (turnCounter.toLong() * 7919L))
+        blockedHint = 0f
+        if (state != State.ROUND_END && state != State.GAME_OVER) state = State.AIMING
+    }
+
+    /** Sincronizza gli acquisti locali verso l'avversario. */
+    fun localTankState(): TankState? =
+        if (settings.isNetworkGame) tanks.getOrNull(settings.localPlayerIndex)?.let { TankState.of(it) } else null
+
     // ---------------------------------------------------------------- update
 
     fun update(dtRaw: Float) {
         if (paused) return
         val dt = dtRaw.coerceIn(0f, 0.05f)
+
+        drainNetwork()
 
         if (shake > 0f) shake = max(0f, shake - dt * 26f)
         if (blockedHint > 0f) blockedHint = max(0f, blockedHint - dt)
@@ -587,10 +733,10 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                         detonate(p.x, p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
                     }
-                    if (rnd.nextFloat() < 0.35f) {
+                    if (fxRnd.nextFloat() < 0.35f) {
                         particles.add(
                             Particle(
-                                p.x, p.y, (rnd.nextFloat() - 0.5f) * 40f, -30f * rnd.nextFloat(),
+                                p.x, p.y, (fxRnd.nextFloat() - 0.5f) * 40f, -30f * fxRnd.nextFloat(),
                                 palette.dirtTop, 0.4f, 2f, 0.6f
                             )
                         )
@@ -606,7 +752,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                     terrain.crater(p.x, p.y, 13f)
                     particles.add(
                         Particle(
-                            p.x, p.y, (rnd.nextFloat() - 0.5f) * 90f, -rnd.nextFloat() * 120f,
+                            p.x, p.y, (fxRnd.nextFloat() - 0.5f) * 90f, -fxRnd.nextFloat() * 120f,
                             palette.dirtTop, 0.5f, 2.5f, 0.9f
                         )
                     )
@@ -638,8 +784,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             val spread = (k - (n - 1) / 2f) * 46f
             val c = Projectile(
                 p.x, p.y,
-                p.vx + spread + (rnd.nextFloat() - 0.5f) * 12f,
-                p.vy - 40f - rnd.nextFloat() * 40f,
+                p.vx + spread + (turnRnd.nextFloat() - 0.5f) * 12f,
+                p.vy - 40f - turnRnd.nextFloat() * 40f,
                 child, p.ownerId
             )
             c.pushTrail()
@@ -648,7 +794,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         for (k in 0 until 14) {
             particles.add(
                 Particle(
-                    p.x, p.y, (rnd.nextFloat() - 0.5f) * 220f, (rnd.nextFloat() - 0.5f) * 220f,
+                    p.x, p.y, (fxRnd.nextFloat() - 0.5f) * 220f, (fxRnd.nextFloat() - 0.5f) * 220f,
                     Color.rgb(200, 230, 255), 0.5f, 2.5f, 0.5f
                 )
             )
@@ -677,8 +823,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                 detonate(x, y, p.weapon, p.ownerId, spawned)
                 val child = p.weapon.child ?: Weapons.BABY_MISSILE
                 for (k in 0 until p.weapon.childCount) {
-                    val ang = Math.toRadians((35.0 + rnd.nextDouble() * 110.0))
-                    val sp = 260f + rnd.nextFloat() * 220f
+                    val ang = Math.toRadians((35.0 + turnRnd.nextDouble() * 110.0))
+                    val sp = 260f + turnRnd.nextFloat() * 220f
                     val c = Projectile(
                         x, y - 12f,
                         (cos(ang) * sp).toFloat() + p.vx * 0.15f,
@@ -700,7 +846,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             for (k in 0 until 26) {
                 particles.add(
                     Particle(
-                        x, y, (rnd.nextFloat() - 0.5f) * 220f, -rnd.nextFloat() * 160f,
+                        x, y, (fxRnd.nextFloat() - 0.5f) * 220f, -fxRnd.nextFloat() * 160f,
                         palette.dirtTop, 0.7f, 3f, 1f
                     )
                 )
@@ -715,14 +861,14 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
 
         val count = (12 + weapon.radius * 0.35f).toInt()
         for (k in 0 until count) {
-            val ang = rnd.nextFloat() * Math.PI.toFloat() * 2f
-            val sp = (60f + rnd.nextFloat() * weapon.radius * 3.2f)
+            val ang = fxRnd.nextFloat() * Math.PI.toFloat() * 2f
+            val sp = (60f + fxRnd.nextFloat() * weapon.radius * 3.2f)
             particles.add(
                 Particle(
                     x, y, cos(ang) * sp, sin(ang) * sp - 40f,
-                    if (rnd.nextFloat() < 0.5f) weapon.color else Color.rgb(255, 180, 70),
-                    0.45f + rnd.nextFloat() * 0.6f,
-                    2f + rnd.nextFloat() * 3f,
+                    if (fxRnd.nextFloat() < 0.5f) weapon.color else Color.rgb(255, 180, 70),
+                    0.45f + fxRnd.nextFloat() * 0.6f,
+                    2f + fxRnd.nextFloat() * 3f,
                     0.8f
                 )
             )
@@ -780,12 +926,12 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             explosions.add(Explosion(dead.x, dead.y - 8f, 70f, Color.rgb(255, 170, 60)))
             shake = max(shake, 10f)
             for (k in 0 until 30) {
-                val ang = rnd.nextFloat() * Math.PI.toFloat() * 2f
-                val sp = 80f + rnd.nextFloat() * 340f
+                val ang = fxRnd.nextFloat() * Math.PI.toFloat() * 2f
+                val sp = 80f + fxRnd.nextFloat() * 340f
                 particles.add(
                     Particle(
                         dead.x, dead.y - 8f, cos(ang) * sp, sin(ang) * sp - 60f,
-                        Color.rgb(255, 150, 60), 0.6f + rnd.nextFloat() * 0.7f, 3f, 0.9f
+                        Color.rgb(255, 150, 60), 0.6f + fxRnd.nextFloat() * 0.7f, 3f, 0.9f
                     )
                 )
             }
@@ -797,8 +943,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         val mx = t.muzzleX()
         val my = t.muzzleY()
         for (k in 0 until 12) {
-            val ang = Math.toRadians(t.angle.toDouble() + (rnd.nextDouble() - 0.5) * 50.0)
-            val sp = 120f + rnd.nextFloat() * 200f
+            val ang = Math.toRadians(t.angle.toDouble() + (fxRnd.nextDouble() - 0.5) * 50.0)
+            val sp = 120f + fxRnd.nextFloat() * 200f
             particles.add(
                 Particle(
                     mx, my, (cos(ang) * sp).toFloat(), (-sin(ang) * sp).toFloat(),
@@ -854,10 +1000,16 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         val alive = aliveTanks
         if (alive.size <= 1) {
             finishRound(alive.firstOrNull())
+            publishState()
             return
         }
         currentIndex = (currentIndex + 1) % tanks.size
         beginTurn(announce = true)
+        publishState()
+    }
+
+    private fun publishState() {
+        if (settings.isNetworkGame && settings.isHost) onStateSync?.invoke(snapshot())
     }
 
     private fun finishRound(winner: Tank?) {

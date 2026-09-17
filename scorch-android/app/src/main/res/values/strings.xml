@@ -12,4 +12,10 @@
     <string name="how_to">Trascina sul campo per mirare (direzione = angolo, lunghezza = potenza), rifinisci con i tasti e premi FUOCO.</string>
     <string name="shop_title">Negozio armi</string>
     <string name="close">Chiudi</string>
+    <string name="bluetooth_play">GIOCA IN DUE (BLUETOOTH)</string>
+    <string name="bluetooth_title">Partita Bluetooth</string>
+    <string name="bluetooth_hint">Un telefono ospita, l\'altro cerca e sceglie l\'avversario. Le impostazioni della partita sono quelle scelte da chi ospita.</string>
+    <string name="bluetooth_host">Ospita</string>
+    <string name="bluetooth_scan">Cerca avversari</string>
+    <string name="bluetooth_devices">Dispositivi</string>
 </resources>

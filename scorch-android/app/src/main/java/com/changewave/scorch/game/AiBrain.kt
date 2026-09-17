@@ -11,7 +11,9 @@ import kotlin.random.Random
  * IA di tiro: risolve la balistica (gravita' + vento), verifica la traiettoria contro il
  * terreno simulandola e infine sporca la soluzione in base alla difficolta'.
  */
-class AiBrain(private val difficulty: Difficulty, private val rnd: Random) {
+class AiBrain(private val difficulty: Difficulty, private val rndProvider: () -> Random) {
+
+    private val rnd: Random get() = rndProvider()
 
     data class Shot(val angle: Float, val power: Float, val weaponId: Int)
 

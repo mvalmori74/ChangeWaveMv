@@ -58,6 +58,7 @@ class MenuActivity : AppCompatActivity() {
         updateLabels()
 
         findViewById<Button>(R.id.buttonStart).setOnClickListener { startGame() }
+        findViewById<Button>(R.id.buttonBluetooth).setOnClickListener { startBluetoothGame() }
     }
 
     private fun playerCount() = seekPlayers.progress + 2       // 2..4
@@ -77,6 +78,21 @@ class MenuActivity : AppCompatActivity() {
         R.id.diffRookie -> Difficulty.ROOKIE
         R.id.diffCyborg -> Difficulty.CYBORG
         else -> Difficulty.VETERAN
+    }
+
+    /** Partita a due via Bluetooth: due giocatori umani, il resto come impostato qui. */
+    private fun startBluetoothGame() {
+        val settings = GameSettings(
+            playerCount = 2,
+            humanCount = 2,
+            rounds = roundCount(),
+            difficultyOrdinal = difficulty().ordinal,
+            windEnabled = checkWind.isChecked,
+            startMoney = startMoney()
+        )
+        val i = Intent(this, BluetoothLobbyActivity::class.java)
+        i.putExtra(BluetoothLobbyActivity.EXTRA_SETTINGS, settings)
+        startActivity(i)
     }
 
     private fun startGame() {
