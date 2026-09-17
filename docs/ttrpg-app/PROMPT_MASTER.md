@@ -401,15 +401,29 @@ costo_egress     = GB scaricati dai 6 device × prezzo_GB   ← la voce dimentic
 costo_fisso      = hosting + DB + eventuale tier a pagamento
 ```
 
-**Conclusioni già ricavabili, da confermare con i numeri reali:**
-1. Il TTS è la voce dominante, non lo STT. Un provider TTS *premium* costa
-   tipicamente un ordine di grandezza più di una cloud *commodity*: con questo tetto
-   **i provider premium sono esclusi**, e anche una commodity va usata con cache e
-   tetto. Da qui la scelta di F4 backend B (TTS di sistema + DSP) come **default**.
-2. **Verifica i tier gratuiti permanenti** dei provider cloud (STT e TTS hanno spesso
-   quote mensili gratuite): allo scenario di 1 tavolo è plausibile che il fabbisogno
-   ci rientri quasi tutto. Se è così, il budget diventa riserva e non spesa corrente —
-   ma **non progettare assumendolo**: il budget guard deve funzionare comunque.
+**Conclusioni, aggiornate con i listini verificati il 17/09/2026** (dettaglio e fonti
+in `docs/ttrpg-app/sprints/SPRINT-00.md` §4):
+1. **Lo STT è l'unica voce variabile che costa davvero; il TTS a questo volume è
+   gratuito.** Le quote mensili gratuite delle voci di sintesi commodity (ordine dei
+   milioni di caratteri) coprono ampiamente il fabbisogno di un tavolo privato
+   (~380.000 caratteri/mese). *Questa conclusione ha ribaltato l'ipotesi iniziale, che
+   dava il TTS come voce dominante: riverificala tu stesso prima di fidartene, i
+   listini cambiano.* Conseguenza operativa: **calibra il budget guard sullo STT**, e
+   sul TTS metti un tetto di sicurezza contro l'uso anomalo (risintesi in massa della
+   cronologia), non un risparmio quotidiano.
+2. **I provider TTS premium restano esclusi**, e con essi la conversione
+   speech-to-speech: lì il costo per minuto è di un altro ordine di grandezza e non
+   esistono quote gratuite comparabili. Resta valida la scelta di F4 backend B
+   (TTS di sistema + DSP) come default, ora però per ragioni di offline e latenza più
+   che di costo puro.
+3. **Attenzione al prezzo scontato in cambio del data logging**: alcuni listini
+   applicano una tariffa inferiore quando si concede al provider di usare l'audio per
+   migliorare i modelli. F9 lo vieta. Verifica sempre **quale tariffa si applica alla
+   configurazione conforme**, non quella in cima alla pagina.
+4. **La voce di costo che può davvero sfondare il tetto non è l'AI: è il backend.**
+   Il piano a pagamento di un servizio managed tipico supera da solo l'intero budget
+   mensile, mentre il piano gratuito sospende il progetto per inattività. Tratta la
+   scelta del backend come la decisione economica più importante dello Sprint 0.
 3. **Storage: scegli un provider object-storage con egress gratuito.** Con i video
    allegati, il traffico in uscita verso 6 device può superare il costo dello storage
    stesso. Questo singolo punto vale più di molte micro-ottimizzazioni.
