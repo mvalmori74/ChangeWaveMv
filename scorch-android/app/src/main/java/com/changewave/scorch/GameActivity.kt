@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.changewave.scorch.audio.Sfx
 import com.changewave.scorch.game.AiShopper
 import com.changewave.scorch.game.GameSettings
 import com.changewave.scorch.game.GameWorld
@@ -42,7 +43,9 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener, BluetoothLink.List
         super.onCreate(savedInstanceState)
 
         settings = intentSettings()
+        Sfx.init(this)
         view = GameView(this, settings, this)
+        view.world.sound = Sfx
         view.setMenuAction { runOnUiThread { showPauseDialog() } }
         setContentView(view)
 
@@ -89,6 +92,7 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener, BluetoothLink.List
     override fun onPause() {
         super.onPause()
         view.world.paused = true
+        Sfx.whistleStop()
     }
 
     override fun onDestroy() {
@@ -289,6 +293,12 @@ class GameActivity : AppCompatActivity(), GameWorld.Listener, BluetoothLink.List
             .setNegativeButton("Esci al menu") { d, _ ->
                 d.dismiss()
                 finish()
+            }
+            .setNeutralButton(if (Sfx.enabled) "Audio: attivo" else "Audio: spento") { d, _ ->
+                d.dismiss()
+                Sfx.toggle()
+                dialogOpen = false
+                showPauseDialog()
             }
             .show()
     }

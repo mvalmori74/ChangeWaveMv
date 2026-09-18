@@ -60,6 +60,25 @@ quel caso la HUD avvisa con «PARETE TROPPO ALTA» e si può sempre spianare il 
 con una palla di terra. Anche l'IA, se finisce in una conca, risale verso il bordo
 più basso prima di sparare.
 
+## 🔊 Audio
+
+Il gioco ha effetti sonori **sintetizzati a runtime**: nessun file audio nell'APK. Al primo
+avvio i suoni vengono generati in codice (oscillatori, rumore filtrato, inviluppi) e salvati
+come WAV nella cache (~180 KB in tutto), poi riprodotti con `SoundPool`.
+
+| Suono | Come è fatto |
+|---|---|
+| Cannone | corpo che scende da ~220 a ~60 Hz più uno schiocco; volume e tono seguono la potenza |
+| Fischio del proiettile | anello tonale a 970 Hz, in loop, la cui velocità di riproduzione segue la caduta |
+| Esplosioni | rumore che si scurisce più un corpo grave: ~870 Hz per un missile, ~220 Hz per una nuke |
+| Frana / palla di terra | granuli di rumore filtrati a due poli, sordi (~220 Hz) |
+| Carro distrutto | boato con risonanza metallica |
+| Tonfo di caduta | grave breve, intensità proporzionale all'altezza |
+| Inizio turno, acquisto, tocchi | note brevi e clic discreto |
+
+L'audio si spegne dal menu (casella **Audio**, scelta ricordata) o durante la partita dal
+menu di pausa.
+
 ## 📶 Partita a due via Bluetooth
 
 Dal menu, **GIOCA IN DUE (BLUETOOTH)**: un telefono preme *Ospita* (diventa visibile per
@@ -126,6 +145,9 @@ app/src/main/java/com/changewave/scorch/
 │   ├── AiShopper.kt         acquisti automatici dell'IA
 │   └── GameSettings.kt      impostazioni partita (Parcelable)
 ├── BluetoothLobbyActivity.kt  ricerca dispositivi, permessi e handshake
+├── audio/
+│   ├── SfxSynth.kt          sintesi dei suoni e scrittura dei WAV in cache
+│   └── Sfx.kt               riproduzione con SoundPool, fischio in loop, mute
 ├── net/
 │   ├── Protocol.kt          pacchetti binari (mossa, acquisti, snapshot)
 │   ├── BluetoothLink.kt     socket RFCOMM, thread di lettura, riconnessione
@@ -154,6 +176,11 @@ fatto girare **headless** con stub delle API grafiche:
 - tutte e 9 le armi sparate e verificate su terreno e carri (esplosione, frammenti,
   divisione MIRV, rotolamento, scavo, deposito di terra)
 - uscita dai crateri su terreno piano, con il costo in carburante misurato
+- **audio**: i 10 suoni vengono generati e misurati (durata, picco, assenza di scatti ai
+  bordi, WAV valido, anello del fischio che si richiude con salto zero) e se ne verifica il
+  contenuto in frequenza: il fischio a ~1.0 kHz, il boato della nuke a ~220 Hz e più grave
+  di quello del missile (~870 Hz), il cannone che scende da 218 a 111 Hz. La misura ha
+  scovato un errore vero: il fischio era stato generato a 44 Hz invece di 970
 - **partita Bluetooth**: due istanze del gioco che comunicano solo con i pacchetti veri
   del protocollo giocano 176 turni e 9 round restando identiche (terreno, vita, carburante,
   inventari). La prova è stata ripetuta disattivando le fotografie di sincronizzazione: con

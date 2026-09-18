@@ -144,6 +144,9 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     var turnCounter = 0
         private set
 
+    /** Effetti sonori: sostituito dall'app con l'implementazione vera. */
+    var sound: SoundBank = SoundBank.Silent
+
     /** Mossa appena giocata in locale, da inviare all'avversario. */
     var onLocalTurn: ((TurnAction) -> Unit)? = null
 
@@ -278,6 +281,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         explosions.clear()
         particles.clear()
         texts.clear()
+        sound.whistleStop()
 
         for (t in tanks) t.resetForRound()
         placeTanks()
@@ -333,7 +337,12 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         t.fuel = min(Tank.MAX_FUEL, t.fuel + 25f) // ricarica a inizio turno
         aiThinkTimer = 0.8f + fxRnd.nextFloat() * 0.5f
         state = State.TURN_START
-        if (announce) showBanner("Turno di ${t.name}", 0.9f) else bannerTimer = 0.35f
+        if (announce) {
+            showBanner("Turno di ${t.name}", 0.9f)
+            sound.turnStart()
+        } else {
+            bannerTimer = 0.35f
+        }
     }
 
     private fun showBanner(text: String, seconds: Float) {
@@ -458,6 +467,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         projectiles.add(p)
 
         spawnMuzzleFlash(t)
+        sound.fire(t.power)
         state = State.FLYING
     }
 
@@ -548,6 +558,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             t.y = terrain.heightAt(t.x)
         }
         projectiles.clear()
+        sound.whistleStop()
         turnRnd = Random(baseSeed xor (round.toLong() shl 40) xor (turnCounter.toLong() * 7919L))
         blockedHint = 0f
         if (state != State.ROUND_END && state != State.GAME_OVER) state = State.AIMING
@@ -662,6 +673,10 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             i--
         }
         projectiles.addAll(spawned)
+
+        // fischio: segue il proiettile piu' avanzato ancora in volo
+        val flying = projectiles.firstOrNull { it.mode == Projectile.Mode.FLY }
+        if (flying != null) sound.whistle(flying.vy) else sound.whistleStop()
     }
 
     private fun stepProjectile(p: Projectile, dt: Float, spawned: ArrayList<Projectile>) {
@@ -842,6 +857,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
 
     private fun detonate(x: Float, y: Float, weapon: Weapon, ownerId: Int, spawned: ArrayList<Projectile>) {
         if (weapon.type == WeaponType.DIRT) {
+            sound.dirt()
             terrain.addDirt(x, y, weapon.radius)
             for (k in 0 until 26) {
                 particles.add(
@@ -857,6 +873,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
 
         terrain.crater(x, y, weapon.radius)
         explosions.add(Explosion(x, y, weapon.radius, weapon.color))
+        sound.explosion(weapon.radius)
         shake = max(shake, min(16f, weapon.radius * 0.09f))
 
         val count = (12 + weapon.radius * 0.35f).toInt()
@@ -924,6 +941,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             // esplosione secondaria del carro distrutto (puo' innescare reazioni a catena)
             terrain.crater(dead.x, dead.y - 4f, 62f)
             explosions.add(Explosion(dead.x, dead.y - 8f, 70f, Color.rgb(255, 170, 60)))
+            sound.destroyed()
             shake = max(shake, 10f)
             for (k in 0 until 30) {
                 val ang = fxRnd.nextFloat() * Math.PI.toFloat() * 2f
@@ -976,6 +994,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                     val drop = t.y - t.fallStartY
                     t.falling = false
                     t.vy = 0f
+                    if (drop > 8f) sound.thud((drop / 220f).coerceIn(0.15f, 1f))
                     if (drop > 70f) {
                         val dmg = (drop - 70f) * 0.28f
                         val applied = t.applyDamage(dmg)

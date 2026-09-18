@@ -7,6 +7,7 @@
     <string name="rounds">Round</string>
     <string name="difficulty">Difficoltà IA</string>
     <string name="wind">Vento</string>
+    <string name="audio">Audio</string>
     <string name="start_money">Denaro iniziale</string>
     <string name="start">INIZIA BATTAGLIA</string>
     <string name="how_to">Trascina sul campo per mirare (direzione = angolo, lunghezza = potenza), rifinisci con i tasti e premi FUOCO.</string>

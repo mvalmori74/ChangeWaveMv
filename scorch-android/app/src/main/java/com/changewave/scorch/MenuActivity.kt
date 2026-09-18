@@ -8,6 +8,7 @@ import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.changewave.scorch.audio.Sfx
 import com.changewave.scorch.game.Difficulty
 import com.changewave.scorch.game.GameSettings
 
@@ -23,6 +24,7 @@ class MenuActivity : AppCompatActivity() {
     private lateinit var labelMoney: TextView
     private lateinit var groupDifficulty: RadioGroup
     private lateinit var checkWind: CheckBox
+    private lateinit var checkAudio: CheckBox
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +40,14 @@ class MenuActivity : AppCompatActivity() {
         labelMoney = findViewById(R.id.labelMoney)
         groupDifficulty = findViewById(R.id.groupDifficulty)
         checkWind = findViewById(R.id.checkWind)
+        checkAudio = findViewById(R.id.checkAudio)
+
+        Sfx.init(this)
+        checkAudio.isChecked = Sfx.enabled
+        checkAudio.setOnCheckedChangeListener { _, checked ->
+            Sfx.setEnabled(checked)
+            if (checked) Sfx.click()
+        }
 
         val watcher = object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {

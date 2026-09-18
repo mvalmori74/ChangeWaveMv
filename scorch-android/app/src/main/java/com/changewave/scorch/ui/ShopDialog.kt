@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import com.changewave.scorch.audio.Sfx
 import com.changewave.scorch.R
 import com.changewave.scorch.game.ShopItem
 import com.changewave.scorch.game.Tank
@@ -92,6 +93,7 @@ object ShopDialog {
             button.setOnClickListener {
                 if (canBuy()) {
                     buy()
+                    Sfx.purchase()
                     refresh()
                 }
             }

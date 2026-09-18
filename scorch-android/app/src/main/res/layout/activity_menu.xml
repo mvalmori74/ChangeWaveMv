@@ -139,6 +139,15 @@
                 android:buttonTint="@color/accent"
                 android:text="@string/wind" />
 
+            <CheckBox
+                android:id="@+id/checkAudio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:textColor="@color/text_primary"
+                android:buttonTint="@color/accent"
+                android:text="@string/audio" />
+
             <TextView
                 android:id="@+id/labelMoney"
                 style="@style/TextAppearance.AppCompat.Body2"

@@ -158,6 +158,7 @@ class Hud(private val density: Float) {
 
     private fun triggerOnce(id: Int) {
         val w = world ?: return
+        if (id != Id.FIRE) w.sound.click() // il colpo ha un suono suo
         when (id) {
             Id.FIRE -> if (!weaponPanelOpen) w.fire()
             Id.MENU -> onMenu?.invoke()
