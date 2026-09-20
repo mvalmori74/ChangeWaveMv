@@ -52,10 +52,14 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         const val ROLL_REST_TIME = 0.8f
         const val ROLL_MAX_TIME = 12f
 
-        /** Scavo del digger: quanto affonda e quanto e' larga la galleria. */
-        const val DIGGER_MAX_DEPTH = 70f
+        /**
+         * Scavo del digger: affonda per un tratto breve e resta vicino al punto d'ingresso,
+         * cosi' fora il terreno quel tanto che basta invece di aprire un fossato.
+         */
+        const val DIGGER_MAX_DEPTH = 45f
+        const val DIGGER_MAX_SPREAD = 22f
         const val DIGGER_CARVE_RADIUS = 9f
-        const val DIGGER_SPEED = 220f
+        const val DIGGER_SPEED = 200f
 
         const val KILL_BONUS = 6_000
         const val SURVIVOR_BONUS = 8_000
@@ -799,16 +803,20 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                     p.digDepth += hypot(nx - p.x, ny - p.y)
                     p.x = nx
                     p.y = ny
-                    // la galleria si assottiglia scendendo: si vede che lo scavo ha un fondo
-                    val taper = 1f - 0.5f * (p.digDepth / DIGGER_MAX_DEPTH).coerceIn(0f, 1f)
-                    terrain.carve(p.x, p.y, DIGGER_CARVE_RADIUS * taper)
+                    // scava facendo franare la terra sopra, come deve fare un digger;
+                    // la galleria si assottiglia scendendo, cosi' si vede che ha un fondo
+                    val taper = 1f - 0.4f * (p.digDepth / DIGGER_MAX_DEPTH).coerceIn(0f, 1f)
+                    terrain.crater(p.x, p.y, DIGGER_CARVE_RADIUS * taper)
                     particles.add(
                         Particle(
                             p.x, p.y, (fxRnd.nextFloat() - 0.5f) * 90f, -fxRnd.nextFloat() * 120f,
                             palette.dirtTop, 0.5f, 2.5f, 0.9f
                         )
                     )
-                    if (p.digDepth > DIGGER_MAX_DEPTH || p.y > worldHeight - 8f) {
+                    val spread = abs(p.x - p.digStartX)
+                    if (p.digDepth > DIGGER_MAX_DEPTH || spread > DIGGER_MAX_SPREAD ||
+                        p.y > worldHeight - 8f
+                    ) {
                         p.alive = false
                         detonate(p.x, p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
@@ -868,10 +876,11 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                 val speed = hypot(p.vx, p.vy).coerceAtLeast(120f)
                 val digger = Projectile(
                     x, y + 2f,
-                    p.vx / speed * DIGGER_SPEED * 0.35f,
-                    abs(p.vy / speed) * DIGGER_SPEED * 0.5f + DIGGER_SPEED,
+                    p.vx / speed * DIGGER_SPEED * 0.18f, // appena inclinato dalla direzione d'arrivo
+                    DIGGER_SPEED,
                     p.weapon, p.ownerId
                 )
+                digger.digStartX = x
                 digger.mode = Projectile.Mode.DIG
                 digger.trail.addAll(p.trail)
                 spawned.add(digger)

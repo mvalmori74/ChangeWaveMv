@@ -52,8 +52,12 @@ danno è salito a 100 $ perché il negozio resti allo stesso ritmo.
 quindi contro una parete torna indietro invece di fermarsi lì. Esplode solo quando tocca
 un carro, esce dal campo o si ferma per più di 0,8 s — non a ogni pianoro.
 
-**Digger.** Affonda al massimo 70 unità con una galleria che si assottiglia mano a mano,
-poi esplode: l'affossamento complessivo del terreno è passato da ~215 a ~140 unità.
+**Digger.** Fora il terreno facendo franare la terra sopra, come deve, ma solo per un breve
+tratto: al massimo **45 unità di scavo** e **22 di scostamento** dal punto d'ingresso, con
+la galleria che si assottiglia scendendo, poi esplode. Misurato su tre angoli di arrivo
+diversi (35°, 60°, 80°): scava 43-44 unità restando entro 6 unità dall'ingresso, e la buca
+finale è larga 128 unità su 1600 (in pratica il solo cratere dell'esplosione) e profonda 113.
+Prima scavava 115-120 unità vagando fino a 69 di lato, per una buca larga 184 e profonda 210.
 
 Equipaggiamento: **scudo** (assorbe i danni prima dello scafo), **kit riparazione**,
 **carburante**. Si comprano nel negozio fra un round e l'altro con i soldi guadagnati
@@ -192,8 +196,9 @@ fatto girare **headless** con stub delle API grafiche:
 - uscita dai crateri su terreno piano, con il costo in carburante misurato
 - correzioni misurate una per una: il roller su un pendio atterra a 773 e **torna indietro**
   fino a 317; in piano rotola fino al carro e scoppia a 18 unità da lui (29 di danno) invece
-  di fermarsi a mezza strada; il digger scava 69 unità sul limite di 70 e il terreno
-  sprofonda di 140 invece di 215; le armi risultano ridotte con la stessa scala (raggi
+  di fermarsi a mezza strada; il digger scava 43-44 unità sul limite di 45 restando entro
+  6 unità dal punto d'ingresso (buca larga 128 e profonda 113, invece di 184 e 210) su tre
+  angoli di arrivo diversi; le armi risultano ridotte con la stessa scala (raggi
   0,69-0,70 · danni 0,60-0,61); il cartello del turno compare 12 volte in un minuto di
   partita e resta visibile al massimo 0,92 s, e dopo un riallineamento fra dispositivi
   viene azzerato (prima poteva restare impresso sullo schermo)

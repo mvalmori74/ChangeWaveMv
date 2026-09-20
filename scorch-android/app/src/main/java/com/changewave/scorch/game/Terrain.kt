@@ -133,30 +133,6 @@ class Terrain(val columns: Int, var worldHeight: Float) {
         pathDirty = true
     }
 
-    /**
-     * Scava come [crater] ma senza far franare la terra sovrastante: serve alla galleria
-     * del digger, altrimenti ogni passo di scavo abbasserebbe la superficie e un tunnel
-     * diventerebbe un fossato senza fondo.
-     */
-    fun carve(cx: Float, cy: Float, r: Float) {
-        val from = max(0, (cx - r).toInt())
-        val to = min(columns - 1, (cx + r).toInt())
-        for (x in from..to) {
-            val dx = x - cx
-            val chord = r * r - dx * dx
-            if (chord <= 0f) continue
-            val half = sqrt(chord)
-            val top = cy - half
-            val bottom = cy + half
-            val s = surface[x]
-            // agisce solo se lo scavo affiora: sotto terra non cambia nulla
-            if (bottom >= s && top <= s) {
-                surface[x] = bottom.coerceAtMost(worldHeight + 40f)
-            }
-        }
-        pathDirty = true
-    }
-
     /** Aggiunge una collinetta di terra (palla di terra). */
     fun addDirt(cx: Float, cy: Float, r: Float) {
         val from = max(0, (cx - r).toInt())

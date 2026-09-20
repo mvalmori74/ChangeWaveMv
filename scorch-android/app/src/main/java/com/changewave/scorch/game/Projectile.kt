@@ -16,6 +16,9 @@ class Projectile(
     var splitDone = false
     var digDepth = 0f
 
+    /** Punto in cui il digger e' entrato nel terreno: limita quanto puo' allontanarsi. */
+    var digStartX = 0f
+
     /** Velocita' orizzontale del rotolamento: negativa = torna indietro. */
     var rollVel = 0f
     var rollTime = 0f
