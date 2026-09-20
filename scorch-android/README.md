@@ -14,32 +14,46 @@ sovrastante frana. Chi resta l'ultimo vivo vince il round.
 
 **Comandi touch:**
 
-| Comando | Azione |
-|---|---|
-| Trascinamento sul campo | Mira rapida: la direzione imposta l'angolo, la lunghezza del trascinamento la potenza |
-| ◀ ▶ | Angolo fine (tenendo premuto accelera) |
-| – + | Potenza fine |
-| ◀◀ ▶▶ | Muove il carro: scala anche le pareti dei crateri, consumando carburante in proporzione alla salita |
-| ARMA | Apre l'arsenale e cambia munizione |
-| FUOCO | Spara |
-| ☰ | Pausa / classifica / uscita |
+| Comando | Dove | Azione |
+|---|---|---|
+| Trascinamento sul campo | — | Mira rapida: la direzione imposta l'angolo, la lunghezza del trascinamento la potenza |
+| ◀ ▶ | in alto a sinistra | Inclinazione del cannone (tenendo premuto accelera) |
+| ◀◀ ▶▶ | in alto a sinistra | Muove il carro: scala anche le pareti dei crateri, consumando carburante in proporzione alla salita |
+| – + | in basso a sinistra | Potenza, con la sua barra |
+| ARMA | in basso a destra | Apre l'arsenale e cambia munizione |
+| FUOCO | in basso a destra | Spara |
+| ☰ | in alto a destra | Pausa / classifica / audio / uscita |
+
+I dati del carro di turno (vita, scudo, denaro) stanno in basso a sinistra, sotto la
+potenza; round e vento in alto al centro.
 
 Una traiettoria tratteggiata mostra l'inizio del tiro, e la scia del colpo precedente
 resta visibile in trasparenza per correggere la mira.
 
 ## 💣 Arsenale
 
-| Arma | Costo | Effetto |
-|---|---|---|
-| Missile Baby | gratis, illimitato | Colpo base, raggio 46 |
-| Missile | 1.000 (x5) | Esplosione media, danno 45 |
-| Baby Nuke | 3.500 (x3) | Raggio 112, danno 70 |
-| Nuke | 9.000 (x2) | Raggio 185, danno 115 |
-| Funky Bomb | 4.000 (x3) | All'impatto sparge 7 frammenti |
-| MIRV | 6.000 (x2) | Si divide in 5 testate al culmine della parabola |
-| Roller | 3.000 (x5) | Tocca terra e rotola in discesa fino all'avvallamento |
-| Digger | 2.500 (x5) | Si conficca nel terreno scavando un tunnel, poi esplode |
-| Palla di Terra | 2.000 (x5) | Non fa danno: costruisce una collina di protezione |
+| Arma | Costo | Raggio | Danno | Effetto |
+|---|---|---|---|---|
+| Missile Baby | gratis, illimitato | 32 | 15 | Colpo base |
+| Missile | 1.000 (x5) | 50 | 27 | Esplosione media |
+| Baby Nuke | 3.500 (x3) | 78 | 42 | Ordigno medio |
+| Nuke | 9.000 (x2) | 130 | 70 | Il colpo più grosso: non uccide da solo un carro intatto |
+| Funky Bomb | 4.000 (x3) | 38 | 12 | All'impatto sparge 7 frammenti (raggio 36, danno 13) |
+| MIRV | 6.000 (x2) | — | — | Si divide in 5 testate (raggio 43, danno 19) al culmine della parabola |
+| Roller | 3.000 (x5) | 57 | 30 | Tocca terra e **rotola**, anche all'indietro: esplode quando tocca un carro |
+| Digger | 2.500 (x5) | 64 | 35 | Si conficca nel terreno e scava **al massimo 70 unità**, poi esplode |
+| Palla di Terra | 2.000 (x5) | 68 | — | Non fa danno: costruisce una collina di protezione |
+
+I valori sono stati ridimensionati mantenendo le proporzioni fra le armi (raggi ×0,70 e
+danni ×0,60 rispetto alla prima versione, che era troppo letale); il guadagno per punto
+danno è salito a 100 $ perché il negozio resti allo stesso ritmo.
+
+**Roller.** Rotola per inerzia: la pendenza lo accelera in discesa e lo frena in salita,
+quindi contro una parete torna indietro invece di fermarsi lì. Esplode solo quando tocca
+un carro, esce dal campo o si ferma per più di 0,8 s — non a ogni pianoro.
+
+**Digger.** Affonda al massimo 70 unità con una galleria che si assottiglia mano a mano,
+poi esplode: l'affossamento complessivo del terreno è passato da ~215 a ~140 unità.
 
 Equipaggiamento: **scudo** (assorbe i danni prima dello scafo), **kit riparazione**,
 **carburante**. Si comprano nel negozio fra un round e l'altro con i soldi guadagnati
@@ -176,6 +190,13 @@ fatto girare **headless** con stub delle API grafiche:
 - tutte e 9 le armi sparate e verificate su terreno e carri (esplosione, frammenti,
   divisione MIRV, rotolamento, scavo, deposito di terra)
 - uscita dai crateri su terreno piano, con il costo in carburante misurato
+- correzioni misurate una per una: il roller su un pendio atterra a 773 e **torna indietro**
+  fino a 317; in piano rotola fino al carro e scoppia a 18 unità da lui (29 di danno) invece
+  di fermarsi a mezza strada; il digger scava 69 unità sul limite di 70 e il terreno
+  sprofonda di 140 invece di 215; le armi risultano ridotte con la stessa scala (raggi
+  0,69-0,70 · danni 0,60-0,61); il cartello del turno compare 12 volte in un minuto di
+  partita e resta visibile al massimo 0,92 s, e dopo un riallineamento fra dispositivi
+  viene azzerato (prima poteva restare impresso sullo schermo)
 - **audio**: i 10 suoni vengono generati e misurati (durata, picco, assenza di scatti ai
   bordi, WAV valido, anello del fischio che si richiude con salto zero) e se ne verifica il
   contenuto in frequenza: il fischio a ~1.0 kHz, il boato della nuke a ~220 Hz e più grave

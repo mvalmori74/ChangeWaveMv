@@ -43,9 +43,23 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         /** Da quanto e' profonda una conca perche' l'IA provi a uscirne. */
         const val PIT_DEPTH = 26f
 
+        /** Rotolamento del roller: accelerazione sul pendio, attrito, limiti. */
+        const val ROLL_GRAVITY = 520f
+
+        /** Attrito: sopra una pendenza di ~6.6 gradi il roller si muove da solo. */
+        const val ROLL_FRICTION = 60f
+        const val ROLL_MAX_SPEED = 420f
+        const val ROLL_REST_TIME = 0.8f
+        const val ROLL_MAX_TIME = 12f
+
+        /** Scavo del digger: quanto affonda e quanto e' larga la galleria. */
+        const val DIGGER_MAX_DEPTH = 70f
+        const val DIGGER_CARVE_RADIUS = 9f
+        const val DIGGER_SPEED = 220f
+
         const val KILL_BONUS = 6_000
         const val SURVIVOR_BONUS = 8_000
-        const val MONEY_PER_DAMAGE = 60
+        const val MONEY_PER_DAMAGE = 100
     }
 
     interface Listener {
@@ -157,6 +171,14 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
     private val fromNetwork = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
     private var pendingSnapshot: WorldSnapshot? = null
     private var pendingTurn: TurnAction? = null
+
+    /**
+     * Timer della fase corrente (attesa a inizio turno, pausa di fine round). E' separato
+     * da [bannerTimer], che e' solo grafico: prima erano la stessa cosa e, se lo stato
+     * cambiava per altra via (per esempio riallineandosi all'avversario), il cartello
+     * "Turno di..." restava impresso sullo schermo.
+     */
+    private var stateTimer = 0f
 
     private var firstPlayerOfRound = 0
     private var aiThinkTimer = 0f
@@ -339,9 +361,10 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         state = State.TURN_START
         if (announce) {
             showBanner("Turno di ${t.name}", 0.9f)
+            stateTimer = 0.9f
             sound.turnStart()
         } else {
-            bannerTimer = 0.35f
+            stateTimer = 0.35f
         }
     }
 
@@ -561,6 +584,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         sound.whistleStop()
         turnRnd = Random(baseSeed xor (round.toLong() shl 40) xor (turnCounter.toLong() * 7919L))
         blockedHint = 0f
+        bannerTimer = 0f
+        stateTimer = 0f
         if (state != State.ROUND_END && state != State.GAME_OVER) state = State.AIMING
     }
 
@@ -578,12 +603,13 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
 
         if (shake > 0f) shake = max(0f, shake - dt * 26f)
         if (blockedHint > 0f) blockedHint = max(0f, blockedHint - dt)
+        if (bannerTimer > 0f) bannerTimer = max(0f, bannerTimer - dt)
         updateEffects(dt)
 
         when (state) {
             State.TURN_START -> {
-                bannerTimer -= dt
-                if (bannerTimer <= 0f) state = State.AIMING
+                stateTimer -= dt
+                if (stateTimer <= 0f) state = State.AIMING
             }
 
             State.AIMING -> {
@@ -617,8 +643,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             }
 
             State.ROUND_END -> {
-                bannerTimer -= dt
-                if (bannerTimer <= 0f && !roundReported) {
+                stateTimer -= dt
+                if (stateTimer <= 0f && !roundReported) {
                     roundReported = true
                     val last = round >= settings.rounds
                     if (last) listener.onGameFinished(this) else listener.onRoundFinished(this, false)
@@ -722,28 +748,37 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
 
                 Projectile.Mode.ROLL -> {
                     p.rollTime += h
-                    val leftH = terrain.heightAt(p.x - 5f)
-                    val rightH = terrain.heightAt(p.x + 5f)
-                    val downhill = when {
-                        rightH > leftH + 0.4f -> 1
-                        leftH > rightH + 0.4f -> -1
-                        else -> 0
+
+                    // rotola per inerzia: la pendenza accelera in discesa e frena in salita,
+                    // quindi contro una parete torna indietro invece di fermarsi la'
+                    val slope = terrain.slopeAt(p.x) // >0 = il terreno scende verso destra
+                    p.rollVel += slope * ROLL_GRAVITY * h
+                    val friction = ROLL_FRICTION * h
+                    p.rollVel = when {
+                        p.rollVel > friction -> p.rollVel - friction
+                        p.rollVel < -friction -> p.rollVel + friction
+                        else -> 0f
                     }
-                    if (downhill == 0 || p.rollTime > 6f) {
+                    p.rollVel = p.rollVel.coerceIn(-ROLL_MAX_SPEED, ROLL_MAX_SPEED)
+
+                    p.x += p.rollVel * h
+                    p.y = terrain.heightAt(p.x)
+
+                    // esplode solo se tocca un carro (anche il proprio), esce dal campo,
+                    // oppure e' rimasto fermo troppo a lungo: mai per un semplice pianoro
+                    val hit = tankAt(p.x, p.y - 8f, p)
+                    if (hit != null) {
                         p.alive = false
                         detonate(p.x, p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
                     }
-                    p.rollDir = downhill
-                    p.x += p.rollDir * 340f * h
-                    p.y = terrain.heightAt(p.x)
                     if (p.x < 6f || p.x > worldWidth - 6f) {
                         p.alive = false
                         detonate(p.x.coerceIn(6f, worldWidth - 6f), p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
                     }
-                    val t = tankAt(p.x, p.y - 6f, p)
-                    if (t != null) {
+                    if (kotlin.math.abs(p.rollVel) < 12f) p.restTime += h else p.restTime = 0f
+                    if (p.restTime > ROLL_REST_TIME || p.rollTime > ROLL_MAX_TIME) {
                         p.alive = false
                         detonate(p.x, p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
@@ -764,14 +799,16 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                     p.digDepth += hypot(nx - p.x, ny - p.y)
                     p.x = nx
                     p.y = ny
-                    terrain.crater(p.x, p.y, 13f)
+                    // la galleria si assottiglia scendendo: si vede che lo scavo ha un fondo
+                    val taper = 1f - 0.5f * (p.digDepth / DIGGER_MAX_DEPTH).coerceIn(0f, 1f)
+                    terrain.carve(p.x, p.y, DIGGER_CARVE_RADIUS * taper)
                     particles.add(
                         Particle(
                             p.x, p.y, (fxRnd.nextFloat() - 0.5f) * 90f, -fxRnd.nextFloat() * 120f,
                             palette.dirtTop, 0.5f, 2.5f, 0.9f
                         )
                     )
-                    if (p.digDepth > 120f || p.y > worldHeight - 8f) {
+                    if (p.digDepth > DIGGER_MAX_DEPTH || p.y > worldHeight - 8f) {
                         p.alive = false
                         detonate(p.x, p.y, p.weapon, p.ownerId, spawned)
                         return@repeat
@@ -821,14 +858,20 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             WeaponType.ROLLER -> {
                 val roller = Projectile(x, terrain.heightAt(x), p.vx, 0f, p.weapon, p.ownerId)
                 roller.mode = Projectile.Mode.ROLL
-                roller.rollDir = if (p.vx >= 0f) 1 else -1
+                // conserva parte della velocita' d'impatto: il resto lo detta il pendio
+                roller.rollVel = (p.vx * 0.55f).coerceIn(-ROLL_MAX_SPEED, ROLL_MAX_SPEED)
                 roller.trail.addAll(p.trail)
                 spawned.add(roller)
             }
 
             WeaponType.DIGGER -> {
                 val speed = hypot(p.vx, p.vy).coerceAtLeast(120f)
-                val digger = Projectile(x, y + 2f, p.vx / speed * 260f, abs(p.vy / speed) * 260f + 120f, p.weapon, p.ownerId)
+                val digger = Projectile(
+                    x, y + 2f,
+                    p.vx / speed * DIGGER_SPEED * 0.35f,
+                    abs(p.vy / speed) * DIGGER_SPEED * 0.5f + DIGGER_SPEED,
+                    p.weapon, p.ownerId
+                )
                 digger.mode = Projectile.Mode.DIG
                 digger.trail.addAll(p.trail)
                 spawned.add(digger)
@@ -939,8 +982,8 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                 texts.add(FloatingText(dead.x, dead.y - 50f, "DISTRUTTO!", Color.rgb(255, 120, 90)))
             }
             // esplosione secondaria del carro distrutto (puo' innescare reazioni a catena)
-            terrain.crater(dead.x, dead.y - 4f, 62f)
-            explosions.add(Explosion(dead.x, dead.y - 8f, 70f, Color.rgb(255, 170, 60)))
+            terrain.crater(dead.x, dead.y - 4f, 44f)
+            explosions.add(Explosion(dead.x, dead.y - 8f, 50f, Color.rgb(255, 170, 60)))
             sound.destroyed()
             shake = max(shake, 10f)
             for (k in 0 until 30) {
@@ -953,7 +996,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                     )
                 )
             }
-            applyBlastDamage(dead.x, dead.y - 8f, 70f, 35f, dead.id, spawned)
+            applyBlastDamage(dead.x, dead.y - 8f, 50f, 21f, dead.id, spawned)
         }
     }
 
@@ -1041,6 +1084,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
             if (winner != null) "${winner.name} vince il round $round!" else "Round $round: nessun superstite",
             2.0f
         )
+        stateTimer = 2.0f
         state = State.ROUND_END
     }
 

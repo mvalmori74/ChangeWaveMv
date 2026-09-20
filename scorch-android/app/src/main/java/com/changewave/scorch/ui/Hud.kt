@@ -50,6 +50,11 @@ class Hud(private val density: Float) {
     private var width = 0
     private var height = 0
 
+    /** Confini del blocco di comandi in alto a sinistra, per non sovrapporci nulla. */
+    private var topControlsBottom = 0f
+    private var topControlsRight = 0f
+    private val powerBar = RectF()
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFakeBoldText = true }
     private val rect = RectF()
@@ -72,35 +77,42 @@ class Hud(private val density: Float) {
         width = w
         height = h
 
-        val bs = dp(52f)      // lato pulsanti quadrati
+        // su schermi stretti i pulsanti si restringono, per non finire uno sull'altro
+        val bs = minOf(dp(52f), w / 13f)
         val gap = dp(8f)
         val bottom = h - dp(14f)
 
-        // colonna sinistra: angolo e potenza
-        val leftX = dp(14f)
-        find(Id.ANGLE_DEC).rect.set(leftX, bottom - bs, leftX + bs, bottom)
-        find(Id.ANGLE_INC).rect.set(leftX + bs + gap, bottom - bs, leftX + bs * 2 + gap, bottom)
-        find(Id.POWER_DEC).rect.set(leftX, bottom - bs * 2 - gap, leftX + bs, bottom - bs - gap)
-        find(Id.POWER_INC).rect.set(leftX + bs + gap, bottom - bs * 2 - gap, leftX + bs * 2 + gap, bottom - bs - gap)
+        // ---- alto a sinistra: inclinazione del cannone e spostamento del carro
+        val leftX = dp(12f)
+        val topY = dp(8f)
+        find(Id.ANGLE_DEC).rect.set(leftX, topY, leftX + bs, topY + bs)
+        find(Id.ANGLE_INC).rect.set(leftX + bs + gap, topY, leftX + bs * 2 + gap, topY + bs)
 
-        // movimento (accanto)
-        val moveX = leftX + bs * 2 + gap * 3
-        find(Id.MOVE_LEFT).rect.set(moveX, bottom - bs, moveX + bs, bottom)
-        find(Id.MOVE_RIGHT).rect.set(moveX + bs + gap, bottom - bs, moveX + bs * 2 + gap, bottom)
+        val moveX = leftX + bs * 2 + gap * 4
+        find(Id.MOVE_LEFT).rect.set(moveX, topY, moveX + bs, topY + bs)
+        find(Id.MOVE_RIGHT).rect.set(moveX + bs + gap, topY, moveX + bs * 2 + gap, topY + bs)
 
-        // destra: fuoco e selezione arma
-        val fireR = dp(46f)
+        topControlsBottom = topY + bs + dp(14f)
+        topControlsRight = moveX + bs * 2 + gap
+
+        // ---- basso a sinistra: potenza (con la sua barra) e dati del giocatore
+        find(Id.POWER_DEC).rect.set(leftX, bottom - bs, leftX + bs, bottom)
+        find(Id.POWER_INC).rect.set(leftX + bs + gap, bottom - bs, leftX + bs * 2 + gap, bottom)
+        powerBar.set(leftX, bottom - bs - dp(16f), leftX + bs * 2 + gap, bottom - bs - dp(8f))
+
+        // ---- basso a destra: fuoco e arma
+        val fireR = minOf(dp(46f), w / 14f)
         val fireCx = w - dp(20f) - fireR
         val fireCy = bottom - fireR
         find(Id.FIRE).rect.set(fireCx - fireR, fireCy - fireR, fireCx + fireR, fireCy + fireR)
 
-        val wBtnW = dp(150f)
+        val wBtnW = minOf(dp(150f), w / 4f)
         val wBtnH = dp(44f)
         find(Id.WEAPON).rect.set(w - dp(20f) - wBtnW, fireCy - fireR - gap - wBtnH, w - dp(20f), fireCy - fireR - gap)
 
-        find(Id.MENU).rect.set(w - dp(56f), dp(10f), w - dp(12f), dp(54f))
+        find(Id.MENU).rect.set(w - dp(56f), dp(8f), w - dp(12f), dp(52f))
 
-        panelRect.set(w * 0.5f - dp(170f), dp(60f), w * 0.5f + dp(170f), h - dp(60f))
+        panelRect.set(w * 0.5f - dp(170f), topControlsBottom + dp(6f), w * 0.5f + dp(170f), h - dp(60f))
         rebuildWeaponRows()
     }
 
@@ -207,6 +219,7 @@ class Hud(private val density: Float) {
         val t = w.currentTank
 
         drawTopBar(canvas, w, t)
+        drawPlayerInfo(canvas, t)
         drawControls(canvas, w, t)
         if (weaponPanelOpen) drawWeaponPanel(canvas, t)
         drawRemoteWait(canvas, w)
@@ -214,58 +227,61 @@ class Hud(private val density: Float) {
     }
 
     private fun drawTopBar(canvas: Canvas, w: GameWorld, t: Tank) {
-        val h = dp(64f)
+        val h = topControlsBottom
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(150, 8, 12, 24)
         canvas.drawRect(0f, 0f, width.toFloat(), h, paint)
 
-        // giocatore corrente
-        text.textAlign = Paint.Align.LEFT
-        text.textSize = dp(16f)
-        text.color = t.color
-        canvas.drawText(t.name, dp(14f), dp(24f), text)
-
-        text.textSize = dp(12f)
-        text.color = Color.rgb(200, 212, 236)
-        canvas.drawText(
-            "HP ${t.health.toInt()}   Scudo ${t.shield.toInt()}   Carb. ${t.fuel.toInt()}   $${t.money}",
-            dp(14f), dp(44f), text
-        )
-
-        // round
+        // round e vento: al centro, alla destra dei comandi
         text.textAlign = Paint.Align.CENTER
         text.textSize = dp(14f)
         text.color = Color.rgb(255, 200, 120)
-        canvas.drawText("ROUND ${w.round}/${w.settings.rounds}", width * 0.5f, dp(22f), text)
+        val infoX = (topControlsRight + width - dp(70f)) * 0.5f
+        canvas.drawText("ROUND ${w.round}/${w.settings.rounds}", infoX, dp(20f), text)
 
-        // vento
-        val windX = width * 0.5f
-        val windY = dp(42f)
-        val windPx = dp(60f) * w.wind
+        val windY = dp(36f)
+        val windHalf = minOf(dp(60f), (width - topControlsRight) * 0.16f)
+        val windPx = windHalf * w.wind
         paint.color = Color.argb(90, 255, 255, 255)
         paint.strokeWidth = dp(2f)
         paint.style = Paint.Style.STROKE
-        canvas.drawLine(windX - dp(60f), windY, windX + dp(60f), windY, paint)
+        canvas.drawLine(infoX - windHalf, windY, infoX + windHalf, windY, paint)
         paint.style = Paint.Style.FILL
         paint.color = if (abs(w.wind) < 0.05f) Color.rgb(150, 160, 180) else Color.rgb(120, 220, 255)
-        canvas.drawCircle(windX + windPx, windY, dp(5f), paint)
+        canvas.drawCircle(infoX + windPx, windY, dp(5f), paint)
         text.textSize = dp(10f)
         text.color = Color.rgb(170, 185, 210)
         canvas.drawText(
             if (abs(w.wind) < 0.05f) "vento assente"
             else "vento " + (abs(w.wind) * 100).toInt() + (if (w.wind > 0) " →" else " ←"),
-            windX, dp(58f), text
+            infoX, dp(52f), text
         )
 
-        // angolo / potenza
+        // angolo e potenza: numeri a destra, accanto al menu
         text.textAlign = Paint.Align.RIGHT
         text.textSize = dp(15f)
         text.color = Color.rgb(235, 240, 255)
-        canvas.drawText("ANG ${t.angle.toInt()}°", width - dp(70f), dp(26f), text)
-        canvas.drawText("POT ${t.power.toInt()}", width - dp(70f), dp(48f), text)
+        canvas.drawText("ANG ${t.angle.toInt()}°", width - dp(66f), dp(24f), text)
+        canvas.drawText("POT ${t.power.toInt()}", width - dp(66f), dp(46f), text)
 
-        // pulsante menu
         drawButton(canvas, find(Id.MENU), true, Color.argb(120, 40, 52, 84))
+    }
+
+    /** Dati del carro di turno: stanno in basso a sinistra, dove prima c'erano i comandi. */
+    private fun drawPlayerInfo(canvas: Canvas, t: Tank) {
+        val x = dp(12f)
+        val baseY = powerBar.top - dp(26f)
+        text.textAlign = Paint.Align.LEFT
+        text.textSize = dp(15f)
+        text.color = t.color
+        canvas.drawText(t.name, x, baseY, text)
+
+        text.textSize = dp(12f)
+        text.color = Color.rgb(200, 212, 236)
+        canvas.drawText(
+            "HP ${t.health.toInt()}   Scudo ${t.shield.toInt()}   $${t.money}",
+            x, baseY + dp(16f), text
+        )
     }
 
     private fun drawControls(canvas: Canvas, w: GameWorld, t: Tank) {
@@ -315,35 +331,34 @@ class Hud(private val density: Float) {
             }
         }
 
-        // etichette sotto ai gruppi
+        // etichette: sotto ai comandi in alto, sopra a quelli in basso
         text.textAlign = Paint.Align.LEFT
         text.textSize = dp(10f)
         text.color = Color.argb(180, 180, 195, 220)
+
         val ang = find(Id.ANGLE_DEC).rect
-        canvas.drawText("ANGOLO", ang.left, ang.top - dp(4f), text)
-        val pow = find(Id.POWER_DEC).rect
-        canvas.drawText("POTENZA", pow.left, pow.top - dp(4f), text)
+        canvas.drawText("ANGOLO", ang.left, ang.bottom + dp(11f), text)
+
         val mv = find(Id.MOVE_LEFT).rect
         if (w.blockedHint > 0f) {
             text.color = Color.rgb(255, 150, 120)
-            canvas.drawText("PARETE TROPPO ALTA", mv.left, mv.top - dp(4f), text)
+            canvas.drawText("PARETE TROPPO ALTA", mv.left, mv.bottom + dp(11f), text)
             text.color = Color.argb(180, 180, 195, 220)
         } else {
-            canvas.drawText("MOVIMENTO (carb. ${t.fuel.toInt()})", mv.left, mv.top - dp(4f), text)
+            canvas.drawText("MOVIMENTO (carb. ${t.fuel.toInt()})", mv.left, mv.bottom + dp(11f), text)
         }
 
-        // barra potenza
-        val bar = RectF(
-            find(Id.POWER_DEC).rect.left,
-            find(Id.POWER_DEC).rect.top - dp(20f),
-            find(Id.POWER_INC).rect.right,
-            find(Id.POWER_DEC).rect.top - dp(12f)
-        )
+        canvas.drawText("POTENZA", powerBar.left, powerBar.top - dp(5f), text)
+
+        // barra della potenza, appena sopra i suoi pulsanti
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(120, 10, 14, 26)
-        canvas.drawRect(bar, paint)
+        canvas.drawRect(powerBar, paint)
         paint.color = Color.rgb(255, 179, 71)
-        rect.set(bar.left, bar.top, bar.left + bar.width() * (t.power / Tank.MAX_POWER), bar.bottom)
+        rect.set(
+            powerBar.left, powerBar.top,
+            powerBar.left + powerBar.width() * (t.power / Tank.MAX_POWER), powerBar.bottom
+        )
         canvas.drawRect(rect, paint)
     }
 
@@ -434,13 +449,13 @@ class Hud(private val density: Float) {
     /** L'area di gioco utile per la mira col dito (esclude le zone dei comandi). */
     fun isPlayArea(x: Float, y: Float): Boolean {
         if (weaponPanelOpen) return false
-        if (y < dp(64f)) return false
+        if (y < topControlsBottom) return false
         for (b in buttons) {
             if (b.rect.contains(x, y)) return false
         }
-        // margine attorno ai gruppi di pulsanti
-        val bottomZone = height - dp(96f)
-        if (y > bottomZone && (x < dp(260f) || x > width - dp(200f))) return false
+        // margine attorno ai blocchi in basso (potenza e dati a sinistra, fuoco a destra)
+        val bottomZone = height - dp(110f)
+        if (y > bottomZone && (x < powerBar.right + dp(20f) || x > width - dp(200f))) return false
         return true
     }
 

@@ -15,8 +15,13 @@ class Projectile(
     var age = 0f
     var splitDone = false
     var digDepth = 0f
-    var rollDir = if (vx >= 0f) 1 else -1
+
+    /** Velocita' orizzontale del rotolamento: negativa = torna indietro. */
+    var rollVel = 0f
     var rollTime = 0f
+
+    /** Da quanto tempo il roller e' praticamente fermo. */
+    var restTime = 0f
 
     /** Coppie (x, y) della scia, usata per il disegno e come traiettoria di riferimento. */
     val trail = ArrayList<Float>(256)
