@@ -42,16 +42,23 @@ preferisco dirlo prima.
 
 | # | Domanda | Perché blocca | Entro |
 |---|---|---|---|
-| **Q1** | **APERTA — "il PC va bene" non è dimensionabile.** Servono: processore, RAM, GPU dedicata sì/no, sistema operativo, e se è già acceso 24/7. Esegui `scripts/raccolta-ambiente.ps1` (Windows) o `.sh` (Linux/macOS): sola lettura, ~30 secondi, produce `ambiente.txt` da rimandarmi. | Determina quale modello di riconoscimento e sintesi può girare e con che tempi. È l'input di SPIKE-1 e SPIKE-2, cioè del rischio n.1. Fra una macchina con GPU recente e una CPU di qualche anno fa ballano **uno o due ordini di grandezza** sul tempo di trascrizione. | giorno 2 |
-| **Q2** | **RISPOSTA PARZIALE: fibra WindTre.** L'operatore è noto per usare CGNAT sulle linee residenziali, con indirizzo pubblico disponibile a pagamento (fonti non ufficiali, da confermare). **L'architettura a tunnel in uscita non ne è influenzata e resta valida in entrambi i casi.** La verifica serve solo a sapere se esiste un piano B: la fa lo stesso script di Q1, cercando indirizzi in `100.64.0.0/10` fra i primi hop. | Non blocca più l'architettura. Determina se l'inoltro di porte resta un'alternativa o è escluso. | giorno 2 |
+| **Q1** | **CHIUSA senza risposta, per decisione dell'utente (20/09).** Le caratteristiche del PC non vengono raccolte a mano: **il server le rileva da solo all'avvio** (`apps/server/src/diagnosi.ts`) e propone modello e concorrenza di conseguenza. Il dimensionamento definitivo resta della misura, che ha sempre la precedenza. | non blocca più nulla | — |
+| **Q2** | **CHIUSA come non necessaria.** Con il tunnel in uscita la presenza di CGNAT è ininfluente: conta solo se il giro completo funziona, e il server lo riporta nella pagina di stato. | non blocca più nulla | — |
 | **Q3** | **Registri tu le 20 clip di riferimento?** Ti do traccia e protocollo: ~30 minuti, la tua voce da GM, con nomi propri inventati. | È l'input del rischio n.1. Senza clip reali, il verdetto su F3 è un'opinione. | giorno 4 |
 | **Q4** | Quali telefoni Android ha il gruppo (modello + versione) e chi può installarci un APK di prova? | SPIKE-3 e SPIKE-4. Senza, i target di §3 non sono verificabili. | giorno 4 |
 | **Q5** | **Hai un secondo disco** (o un NAS, o un disco esterno sempre collegato) su cui scrivere i backup? E un misuratore di consumo da presa? | F11: un backup sullo stesso disco del server non è un backup. Il misuratore serve per §4. | giorno 6 |
 
-Q1 è la più urgente e **l'unica ancora davvero aperta**: senza le caratteristiche del
-PC non posso scegliere il modello di riconoscimento vocale, e quindi non posso
-scrivere SPIKE-1. Lo script `scripts/raccolta-ambiente.ps1` risponde insieme a Q1 e Q2
-in mezzo minuto.
+**Aggiornamento del 20/09**: Q1 e Q2 sono state chiuse spostando il problema dentro il
+software invece di girarlo all'utente. Il server si autodiagnostica all'avvio e
+riporta macchina, profilo di trascrizione proposto ed esposizione nella pagina di
+stato; `scripts/raccolta-ambiente.ps1` resta disponibile ma non serve più a nessuno
+step obbligatorio.
+
+È anche la soluzione tecnicamente migliore: resta corretta se il server viene spostato
+su un altro computer, cosa che una raccolta manuale fatta una volta non fa.
+
+Restano aperte **Q3 (le clip, attese per il weekend)** e **Q5 (il secondo disco per i
+backup)**.
 
 **Nota sull'upload, che si è chiarita da sola.** Su fibra — sia FTTH sia mista
 rame — la banda in salita di una linea WindTre è di norma ampiamente sufficiente per

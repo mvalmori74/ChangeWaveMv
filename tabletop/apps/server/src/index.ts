@@ -8,10 +8,13 @@
 import { createServer } from 'node:http';
 import { statfs } from 'node:fs/promises';
 import { livelloDisco, messaggioPerIlGm } from './disco.js';
+import { profiloIniziale, spiegaEsposizione, valutaEsposizione } from './diagnosi.js';
+import { rilevaMacchina } from './rilevaMacchina.js';
 
 const PORTA = Number(process.env['PORTA'] ?? 8080);
 const VERSIONE = process.env['VERSIONE'] ?? 'sviluppo';
 const PERCORSO_DATI = process.env['PERCORSO_DATI'] ?? '/dati';
+const TUNNEL_ATTIVO = process.env['TUNNEL_ATTIVO'] === '1';
 
 async function statoDisco() {
   try {
@@ -24,6 +27,16 @@ async function statoDisco() {
     return { totale: 0, libero: 0, livello: 'sconosciuto', avviso: null };
   }
 }
+
+// Autodiagnosi all'avvio: il server si misura da solo invece di farsi dire com'e'
+// fatta la macchina. Calcolata una volta sola, non a ogni richiesta.
+const macchina = await rilevaMacchina();
+const profilo = profiloIniziale(macchina);
+console.warn(
+  `macchina: ${macchina.coreLogici} core, ${macchina.ramGb} GB` +
+  `${macchina.gpu ? `, GPU ${macchina.gpu}` : ', nessuna GPU rilevata'}`,
+);
+console.warn(`profilo di trascrizione proposto: ${profilo.modelloIniziale} — ${profilo.motivo}`);
 
 const server = createServer((req, res) => {
   const invia = (codice: number, corpo: unknown) => {
@@ -44,6 +57,12 @@ const server = createServer((req, res) => {
         versione: VERSIONE,
         avviatoDa: Math.round(process.uptime()),
         disco,
+        macchina,
+        profiloTrascrizione: profilo,
+        esposizione: {
+          esito: valutaEsposizione(TUNNEL_ATTIVO, null),
+          spiegazione: spiegaEsposizione(valutaEsposizione(TUNNEL_ATTIVO, null)),
+        },
         codaVocaleInAttesa: 0,
         ultimoBackup: null,
       }),
