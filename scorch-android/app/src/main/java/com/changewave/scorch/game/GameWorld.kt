@@ -53,11 +53,11 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
         const val ROLL_MAX_TIME = 12f
 
         /**
-         * Scavo del digger: affonda per un tratto breve e resta vicino al punto d'ingresso,
-         * cosi' fora il terreno quel tanto che basta invece di aprire un fossato.
+         * Scavo del digger: affonda a fondo ma quasi in verticale, cosi' apre un pozzo
+         * profondo invece di un fossato che corre lungo lo schermo.
          */
-        const val DIGGER_MAX_DEPTH = 45f
-        const val DIGGER_MAX_SPREAD = 22f
+        const val DIGGER_MAX_DEPTH = 110f
+        const val DIGGER_MAX_SPREAD = 30f
         const val DIGGER_CARVE_RADIUS = 9f
         const val DIGGER_SPEED = 200f
 
@@ -876,7 +876,7 @@ class GameWorld(val settings: GameSettings, private val listener: Listener) {
                 val speed = hypot(p.vx, p.vy).coerceAtLeast(120f)
                 val digger = Projectile(
                     x, y + 2f,
-                    p.vx / speed * DIGGER_SPEED * 0.18f, // appena inclinato dalla direzione d'arrivo
+                    p.vx / speed * DIGGER_SPEED * 0.12f, // appena inclinato dalla direzione d'arrivo
                     DIGGER_SPEED,
                     p.weapon, p.ownerId
                 )
