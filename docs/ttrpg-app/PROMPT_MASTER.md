@@ -99,24 +99,36 @@ trascritto → **in chat compare il testo** insieme all'audio riproducibile.
 - Lingua italiana come default di tavolo. **Nessuna traduzione**: decisione §13-D1,
   solo trascrizione nella lingua parlata. La traduzione multilingua resta in
   `docs/backlog.md` e **non** va predisposta con astrazioni speculative.
-- **Due livelli di motore STT** (conseguenza diretta del budget §4-bis):
-  - **Tier 0 — on-device Android, costo zero**: riconoscimento vocale di sistema
-    (`SpeechRecognizer`, con pacchetto lingua italiana scaricato per funzionare
-    offline). Default di prodotto. Limiti reali: boost del vocabolario personalizzato
-    assente o molto limitato, qualità inferiore sul parlato lungo, comportamento
-    variabile tra produttori di device. Vanno misurati, non ipotizzati.
-  - **Tier 1 — cloud, opt-in e contabilizzato**: usato quando l'utente lo attiva e il
-    budget residuo lo consente. Guadagno atteso: accuratezza e **boost del glossario
-    di campagna** (i nomi inventati sono esattamente ciò che il Tier 0 sbaglia).
-  - La selezione del tier è una policy server-side, non una `if` sparsa nel client.
+- **Due livelli di motore STT, entrambi senza costo per minuto** (§4-bis):
+  - **Tier 1 — riconoscimento eseguito sul server di casa. È il percorso
+    principale.** Un modello di riconoscimento vocale eseguito in locale, scelto fra
+    quelli con licenza libera e buona resa sull'italiano. Vantaggio decisivo:
+    **accetta il condizionamento con il glossario di campagna**, cioè la mitigazione
+    del rischio n.1 che il motore di sistema Android non permette. L'audio non lascia
+    la rete di casa.
+  - **Tier 0 — riconoscimento di sistema Android, sul telefono.** Ripiego quando il
+    server non risponde, e unica via per trascrivere senza server. Qualità inferiore
+    e nessun glossario possibile. Resta utile: è l'unico che funziona a server spento.
+  - La selezione del tier è una policy server-side con ripiego automatico lato client
+    quando il server è irraggiungibile, non una `if` sparsa nel codice.
+  - **Dimensionamento del modello**: la scelta fra modelli più piccoli e più grandi è
+    un compromesso fra accuratezza e tempo di elaborazione sull'hardware reale del
+    PC. Va deciso **misurando su quel PC** (SPIKE-1), non scegliendo il modello più
+    grande che esiste.
+- **Coda di elaborazione sul server**: le trascrizioni sono lavori in coda, con
+  limite di concorrenza tarato sull'hardware. Sei giocatori che mandano un vocale
+  contemporaneamente non devono mettere in ginocchio il PC né far aspettare dieci
+  minuti il primo della fila. Stato del lavoro visibile in chat.
 - Fallback a cascata: Tier 1 → Tier 0 → solo audio con banner "trascrizione non
   disponibile". Nessuno di questi stati deve rompere la chat.
 
 **AC**: WER misurato su uno stesso set di 20 clip italiane di narrazione fantasy,
-**per entrambi i tier** (Tier 1 con e senza glossario), documentato in
-`docs/quality/stt-benchmark.md`. Nessun target inventato: si misura e si riporta il
-numero reale. Se il delta Tier 1 − Tier 0 è marginale, **proponi di eliminare il
-Tier 1** e liberare l'intero budget per il TTS.
+**per entrambi i tier** e per il Tier 1 con e senza glossario, documentato in
+`docs/quality/stt-benchmark.md`, insieme al **tempo di elaborazione sul PC reale**.
+Nessun target inventato: si misura e si riporta il numero. Il confronto che decide il
+progetto è **Tier 1 con glossario contro Tier 0**: se il guadagno sui nomi propri non
+è netto, il self-hosting del riconoscimento non vale la complessità che aggiunge e va
+riportato.
 
 ### F4 — Voci e modulazione (orco, elfo, nano, umano, …)
 Requisito centrale e la parte tecnicamente più delicata. Implementa **un'interfaccia,
@@ -136,20 +148,24 @@ interface VoiceTransform {
   licenza, verificalo **prima** di integrarle e registralo in `docs/licenses.md`).
   Latenza < 40 ms, funziona offline. Qualità "effetto scenico", non realismo.
   Preset di partenza in Appendice A.
-- **Backend B — `tts-local` (on-device, costo zero)**: motore TTS di sistema Android,
-  parametrizzato per voce/pitch/velocità e **poi passato per la catena DSP**. È la
-  combinazione che rende possibile avere voci di personaggio **a costo marginale
-  nullo e offline**, che è ciò che il budget di §4-bis richiede. Qualità: intelligibile
-  ma sintetica. Da misurare, non da dare per buona.
-- **Backend C — `tts-cloud` (opt-in, contabilizzato)**: TTS neurale di una cloud
-  *commodity* (classe Azure/Google/Polly), non di un provider premium: vedi il calcolo
-  in §4-bis, con 20 €/mese i provider di fascia alta sono fuori discussione. Streaming,
-  cache aggressiva dell'audio renderizzato (stesso testo + stesso preset = nessuna
-  seconda chiamata).
-- **Backend D — `sts` (speech-to-speech, conserva la recitazione)**: **fuori budget,
-  spostato in `docs/backlog.md`.** Era il risultato qualitativamente migliore ed è
-  giusto sapere che lo si sta rinunciando per vincolo economico, non tecnico.
-  Non lasciare codice morto o feature flag inerti per questo backend.
+- **Backend B — `tts-server` (sintesi neurale sul PC di casa). È il percorso
+  principale.** Un motore di sintesi vocale con licenza libera, eseguito in locale,
+  con voci italiane e più voci distinte assegnabili ai preset; l'uscita passa poi per
+  la catena DSP per caratterizzarla ulteriormente. Costo marginale nullo, nessun dato
+  che esce di casa, qualità superiore al motore di sistema del telefono. **Verifica la
+  licenza del motore e delle singole voci**: alcuni modelli vocali di ottima qualità
+  hanno licenze che escludono usi che qui non ci riguardano, ma vanno comunque lette
+  e registrate in `docs/licenses.md`.
+- **Backend C — `tts-device` (motore TTS di sistema Android)**: ripiego quando il
+  server non risponde, e unica via a server spento. Qualità inferiore, ma la
+  differenza fra "voce brutta" e "nessuna voce" è tutta a favore della prima.
+- **Backend D — `sts` (speech-to-speech, conserva la recitazione)**: resta in
+  `docs/backlog.md`, ma **per ragioni diverse da prima**. Non è più il costo a
+  escluderlo: esistono modelli di conversione vocale eseguibili in locale. A
+  escluderlo ora sono la complessità e il carico sull'hardware domestico, che è lo
+  stesso che deve già trascrivere e sintetizzare. Rivalutabile dopo la v1.0, quando
+  si saprà quanto margine ha davvero quel PC. Non lasciare codice morto o feature
+  flag inerti nel frattempo.
 
 Requisiti trasversali:
 - Selettore voce persistente per membro **e** override per singolo messaggio (il GM
@@ -158,13 +174,13 @@ Requisiti trasversali:
   sceglie cosa ascoltare (originale / voce PNG) e può leggere solo il testo.
 - Nessuna clonazione della voce di persone reali senza consenso esplicito e
   registrato. Voci preset only in v1.0: è anche un vincolo legale, non solo etico.
-- **Budget guard** (vedi §4-bis): contatore di secondi STT cloud e caratteri TTS
-  cloud per tavolo e per mese, verificato **server-side** prima di ogni chiamata a
-  pagamento, con soglia di allerta (80 %) e degrado automatico e silenzioso ai
-  backend a costo zero al raggiungimento del tetto. Il degrado va **mostrato in app**
-  con un'etichetta comprensibile, non subìto senza spiegazione.
+- **Nessun budget guard economico**: non esistendo un costo per minuto, la
+  contabilizzazione in euro non serve e non va implementata. Il limite da sorvegliare
+  è la **capacità di calcolo del PC** (coda con limite di concorrenza, come in F3) e
+  lo **spazio su disco** (§4-bis punto 3).
 - **Cache dell'audio renderizzato** indicizzata su `hash(testo + preset + versione
-  motore)`: a un tavolo che rigioca le stesse frasi non si paga due volte.
+  motore)`: qui non risparmia denaro, risparmia tempo di CPU e attesa dei giocatori,
+  che a questo punto è la risorsa scarsa.
 
 **AC**: A/B ascoltabile dei backend A, B e C sui 4 preset, con latenza p50/p95 e
 **costo per minuto di narrazione** misurati e tabellati in
@@ -207,22 +223,26 @@ automaticamente e il fatto compare in telemetria.
   necessario solo per lo scatto diretto, e va chiesto nel momento in cui serve.
 - Compressione client-side prima dell'upload, **strip EXIF/GPS**, generazione
   thumbnail, upload resumibile con progress e retry, cancellazione.
-- Limiti espliciti e comunicati, **derivati dal budget di §4-bis e non scelti a
-  gusto**: immagine ≤ 8 MB (ricompressa a lato lungo 2048 px), video ≤ 25 MB / 30 s.
-  Se il tier di storage gratuito scelto è più capiente del previsto, alzali con un
-  cambio di configurazione, non di codice.
-- **Retention dei media**: scadenza automatica configurabile (default 90 giorni) con
-  possibilità per il GM di **fissare (`pin`)** fino a N elementi come permanenti — le
-  mappe e gli handout servono per tutta la campagna, i meme del giovedì no. Senza
-  questo meccanismo lo storage cresce in modo monotono e il tetto di 20 €/mese salta
-  nel giro di pochi mesi. È un requisito, non un'ottimizzazione.
-- **Retention dell'audio**: l'audio originale dei messaggi vocali scade prima
-  (default 30 giorni); la **trascrizione resta per sempre** perché è testo e non
-  costa nulla. Comunicalo in app: è anche il modo in cui la cronologia di campagna
-  resta consultabile a costo zero.
+- Limiti espliciti e comunicati, ora **tarati sul disco di casa e sulla banda in
+  salita della linea domestica**, non su un listino: immagine ≤ 8 MB (ricompressa a
+  lato lungo 2048 px), video ≤ 50 MB / 60 s, tutti configurabili senza toccare il
+  codice. Il collo di bottiglia da verificare **non è il disco: è la banda in
+  upload** della connessione di casa, che su molte linee domestiche è una frazione
+  di quella in discesa. Sei giocatori che scaricano una mappa da 8 MB durante la
+  sessione passano tutti da lì.
+- **Nessuna scadenza automatica** (§13-D10): i contenuti restano finché il GM non
+  cancella la campagna o fa pulizia a mano. Conseguenze da implementare:
+  - **Cancellazione manuale che libera davvero lo spazio**: eliminare una campagna o
+    un allegato deve rimuovere i file dal disco, non solo la riga dal database. Un
+    test lo verifica contando i byte prima e dopo.
+  - **Vista di occupazione per campagna** (§4-bis punto 3), perché il GM possa
+    decidere cosa archiviare: senza un dato, la pulizia manuale non avviene mai.
+  - **Deduplicazione dei file identici** su hash del contenuto: la stessa mappa
+    rimandata tre volte occupa lo spazio di una. È poca fatica e con retention
+    infinita rende molto.
 - Visualizzatore full-screen con pinch-zoom, salvataggio in galleria, player video.
-- URL firmati a TTL breve; nessun bucket pubblico; storage **senza costi di egress**
-  (vedi §4-bis): con i video, l'egress è la voce che sorprende.
+- URL firmati a TTL breve, nessuna directory servita in elenco: i media stanno su un
+  disco di casa, ma restano raggiungibili da internet attraverso il tunnel.
 
 ### F7 — Notifiche push
 - FCM per nuovo messaggio, menzione, inizio sessione, tiro del GM. Nessun APNs:
@@ -253,30 +273,58 @@ distruttiva** (`messages` con `deleted_at` e `deleted_by`, tabella `reports` pre
 nel modello anche se inutilizzata).
 
 ### F9 — Privacy e conformità
-Scope ridotto per la distribuzione privata, **non azzerato**: la voce di una persona
-è un dato personale anche se il gruppo è di amici, e l'audio esce comunque verso un
-provider terzo quando lo STT/TTS cloud è attivo.
+**Il self-hosting (§13-D9) semplifica molto questo requisito**: nessun dato viene
+trasferito a terzi, l'audio non lascia la rete di casa, non ci sono provider da
+vincolare né opt-out dall'addestramento da verificare. Cade l'intero apparato di
+conformità verso fornitori esterni.
 
-Obbligatorio in v1.0:
-- Schermata di consenso esplicito e revocabile all'elaborazione cloud della voce,
-  con versione e timestamp salvati; se negato, l'app resta pienamente usabile in
-  modalità solo-DSP e solo-audio (nessuna trascrizione).
-- Retention configurata e dichiarata su audio originale, audio renderizzato e
-  trascrizioni; cancellazione effettiva dello storage, non solo del record.
-- Cancellazione account con rimozione dei dati, senza flusso self-service elaborato:
-  è accettabile una procedura manuale documentata in `docs/runbooks/`.
-- Verifica che i provider scelti offrano **opt-out dall'addestramento sui dati
-  inviati** (criterio di selezione nello spike S0, non un dettaglio).
-- **Nessuna E2EE**: il server deve elaborare l'audio per STT/TTS. Va **detto
-  chiaramente in app**, non nascosto in una policy.
+Resta, e non è formalità:
+- **Trasparenza su dove finiscono le registrazioni.** I giocatori devono sapere, in
+  modo esplicito e in app, che audio, trascrizioni e allegati risiedono **sul
+  computer di casa del GM**, che il GM vi ha accesso diretto e che la conservazione è
+  a tempo indeterminato finché lui non cancella (§13-D10). È un'informazione che
+  cambia come le persone si comportano al microfono: va data prima, non sepolta.
+- **Cancellazione effettiva su richiesta**: un giocatore che chiede la rimozione dei
+  propri messaggi deve ottenerla, file su disco compresi. Procedura manuale
+  documentata in `docs/runbooks/`, non serve un flusso self-service.
+- **Nessuna E2EE**: il server elabora l'audio per trascrizione e sintesi. Con il
+  server in casa del GM il modello di fiducia è comunque diverso e più comprensibile
+  di quello cloud — ma va detto, non lasciato intuire.
 
-Deferito al backlog (necessario prima di una distribuzione pubblica): privacy policy
-pubblica, age gate, export dati self-service, DPA formalizzati.
+Deferito al backlog (necessario solo in caso di distribuzione pubblica): privacy
+policy pubblica, age gate, export dati self-service.
 
 ### F10 — Accessibilità
 Dynamic type, contrasto AA, label per screen reader su ogni controllo, alternative
 non animate, sottotitoli sempre disponibili sui vocali (F3 li produce già),
 target touch ≥ 44 pt, navigazione da tastiera esterna.
+
+### F11 — Backup, esportazione e archiviazione della campagna
+**Requisito nuovo e non negoziabile, conseguenza diretta di §13-D9 e §13-D10.** Con il
+server in casa e la retention infinita, il disco di quel PC è **l'unica copia** di
+anni di gioco. Un guasto del disco, un ransomware o un errore di manutenzione
+cancellano tutto. La tua richiesta è di gestire archiviazione e cancellazione a mano:
+perché sia una scelta e non un incidente in attesa, servono gli strumenti per farlo.
+
+- **Backup automatico locale, attivo di default.** Dump periodico del database più
+  copia incrementale dei media su un **secondo disco o percorso distinto** (una
+  seconda copia sullo stesso disco non è un backup). Configurato nel compose, non
+  lasciato all'iniziativa. Nessun servizio remoto, nessun costo.
+- **Verifica del ripristino, non solo del salvataggio.** Un backup mai ripristinato
+  non è un backup: il runbook contiene una procedura di ripristino **provata almeno
+  una volta**, e lo Sprint 0 la include fra i criteri di completamento. È la cosa che
+  tutti rimandano e che si paga una volta sola, male.
+- **Esportazione di una campagna in un archivio autoconsistente**: un unico file con
+  trascrizioni, cronologia, log dei tiri e media, più una versione leggibile senza
+  l'app (HTML o Markdown con i media accanto). È ciò che ti permette di chiudere
+  un'avventura, archiviarla e liberare spazio **senza perderla**. È anche la memoria
+  della campagna, che per un gruppo che gioca da anni vale più del software.
+- **Importazione dello stesso archivio**, così che l'esportazione sia reversibile e
+  non un vicolo cieco.
+- **Cancellazione di una campagna** con doppia conferma, riepilogo di cosa verrà
+  eliminato e spazio che verrà liberato, e **proposta automatica di esportare prima**.
+- Stato dell'ultimo backup visibile al GM in app: data, esito, dimensione. Un backup
+  fallito da tre settimane e nessuno se n'è accorto è lo scenario da impedire.
 
 ---
 
@@ -285,15 +333,17 @@ target touch ≥ 44 pt, navigazione da tastiera esterna.
 | Metrica | Target v1.0 | Come si misura |
 |---|---|---|
 | Cold start → chat usabile | < 1,5 s (device medio) | trace startup in CI perf |
-| Latenza messaggio testo E2E | p95 < 400 ms (stessa regione) | timestamp server-client |
-| Vocale: fine registrazione → trascrizione visibile | p95 < 4 s per 30 s di audio | telemetria |
-| TTS locale: richiesta → primo byte audio | p95 < 300 ms | telemetria |
-| TTS cloud: richiesta → primo byte audio | p95 < 800 ms | telemetria |
+| Latenza messaggio testo E2E | p95 < 400 ms, telefono ↔ server di casa attraverso il tunnel | timestamp server-client |
+| Vocale: fine registrazione → trascrizione visibile | **da fissare dopo SPIKE-1**, misurata sul PC reale: non promettere un numero prima di averlo misurato | telemetria server |
+| Sintesi vocale sul server: richiesta → primo byte audio | **da fissare dopo SPIKE-2** | telemetria server |
+| TTS di sistema (ripiego): richiesta → primo byte | p95 < 300 ms | telemetria |
+| Coda vocale con 6 richieste simultanee | nessuna richiesta oltre 3× il tempo della singola | test di carico |
 | Animazione dado | 60 fps in fascia `high`, 30 fps floor in `medium`, fallback in `low` (§4-ter) | profiler sul device più debole del gruppo |
-| Crash-free sessions | ≥ 99,5 % | Sentry |
-| **Costo totale mensile (fisso + variabile)** | **≤ 20 €** (§4-bis) | dashboard costi per feature, allarme a 16 € |
-| Costo marginale con budget esaurito | **0 €** (degrado a Tier 0) | test del budget guard |
-| Occupazione storage a regime | entro il tier gratuito scelto | job di retention + metrica |
+| Crash-free sessions | ≥ 99,5 % | raccolta crash sul server di casa |
+| **Costo ricorrente in abbonamenti** | **0 €** (§13-D9) | verifica documentale |
+| Consumo elettrico del server | misurato e riportato, non stimato | misuratore da presa (§4-bis) |
+| Spazio su disco | avviso all'80 %, comportamento definito al 100 % | metrica + test a disco saturo |
+| Ripristino da backup | **provato almeno una volta**, tempo di ripristino documentato | esercitazione (F11) |
 | Consumo batteria sessione 3 h | ≤ 25 % sul device più debole del gruppo | misura manuale documentata |
 
 **Device di riferimento** (§13-D6, dettaglio in §4-ter): Android 13 / API 33 come
@@ -331,27 +381,75 @@ Prescritto, salvo ADR che motivi la deviazione:
     un'interfaccia platform-agnostic: definiscila bene ora, costa poco; non scrivere
     però alcuna implementazione iOS.
 
-**Backend**
-- Node 22 + TypeScript, Fastify (REST) + WebSocket per il realtime, Postgres,
-  Redis (presence, rate limit, pub/sub fan-out), object storage S3-compatibile.
-- Alternativa accettata per accelerare la v1: **Supabase** (Postgres + Auth +
-  Realtime + Storage + RLS), **a patto** che l'accesso passi da un layer
-  `packages/data-access` così il vendor resta sostituibile. Le chiamate ai provider
-  AI restano su funzioni server-side con chiavi mai esposte.
-- Monorepo pnpm: `apps/mobile`, `apps/api`, `packages/shared` (tipi + schema Zod +
-  **motore dadi condiviso**), `packages/data-access`.
+**Backend — self-hosted in casa** (decisione §13-D9)
+- Gira interamente su un PC domestico dell'utente, raggiungibile da internet tramite
+  DNS dinamico. Nessun servizio cloud a pagamento, nessun costo ricorrente di
+  abbonamento.
+- Node 22 + TypeScript, Fastify (REST) + WebSocket per il realtime, **Postgres**,
+  media su **filesystem locale** (niente object storage a pagamento), Redis solo se
+  serve davvero — su un tavolo da 6 persone probabilmente non serve, e un componente
+  in meno da mantenere in casa vale più di un'ottimizzazione teorica. Motivalo in ADR.
+- **Confezionamento obbligatorio: un unico `docker compose up -d`.** Il destinatario
+  di questo software è una persona che la sera vuole giocare, non amministrare un
+  server. Tutto dentro il compose: database, API, motori vocali, reverse proxy,
+  connettore del tunnel, job di backup. Aggiornamento con un solo comando, rollback
+  documentato.
+- Riavvio automatico dei container, ripartenza dopo un'interruzione di corrente
+  (impostazione del BIOS "riprendi all'arrivo dell'alimentazione": mettila nel
+  runbook, è il genere di dettaglio che si scopre dopo il primo temporale).
+- Rotazione dei log e tetto alla loro dimensione: un disco pieno di log è il modo più
+  stupido di perdere una serata.
 
-**Provider AI** — scelti dopo lo spike dello Sprint 0, con questi criteri, in
-quest'ordine di priorità: **costo unitario e ampiezza del tier gratuito** (§4-bis),
-qualità sull'italiano, latenza streaming, opt-out dall'addestramento, data residency
-UE. Nessun lock-in: interfacce `SttProvider` e `TtsProvider` con almeno due
-implementazioni ciascuna, di cui **una on-device a costo zero** (che è sempre anche
-il fallback).
+**Esposizione su internet — usa un tunnel in uscita, non l'inoltro delle porte**
+- Requisito: **nessuna porta in ingresso aperta sul router di casa.** Il server
+  stabilisce una connessione in uscita verso un servizio di tunnel e riceve da lì il
+  traffico.
+- Tre problemi risolti in un colpo solo: (1) funziona anche se l'operatore usa
+  **CGNAT** e non fornisce un indirizzo IP pubblico — caso tutt'altro che raro sulle
+  connessioni domestiche italiane, e che renderebbe **impossibile** l'inoltro delle
+  porte; (2) certificato TLS valido senza gestirne il rinnovo a mano, e Android
+  blocca il traffico in chiaro di default, quindi il TLS non è opzionale;
+  (3) nessuna porta esposta significa una superficie di attacco verso la rete di casa
+  enormemente ridotta.
+- **Verifica prima di tutto il resto se la connessione è sotto CGNAT**: se lo è, la
+  soluzione a inoltro di porte è morta in partenza e il tunnel non è una preferenza
+  ma l'unica strada.
+- Controlla i termini d'uso del servizio di tunnel scelto riguardo al **traffico di
+  file grandi**: alcuni piani gratuiti limitano il transito di contenuti non-HTML
+  voluminosi. Riguarda i video allegati (F6), non il resto. Se il vincolo esiste,
+  documentalo e valuta di servire i media per via diversa.
+- Il DNS dinamico resta utile come indirizzo stabile e come piano B, ma **non** come
+  meccanismo principale di esposizione.
+
+**Sicurezza di un servizio ospitato in casa** — il server sta nella rete dove ci sono
+anche il NAS, la stampante e i computer di famiglia. Requisiti non negoziabili:
+autenticazione robusta su ogni endpoint; Postgres **mai** esposto fuori dalla rete dei
+container; container senza accesso alla rete dell'host; nessuna credenziale di
+default; limitazione della frequenza delle richieste; aggiornamenti delle immagini
+documentati nel runbook. Se l'API viene compromessa, la posta in gioco non è "un
+tavolo di gioco": è la rete domestica.
+
+**Motori vocali** — eseguiti in locale, scelti dopo gli spike dello Sprint 0 con
+questi criteri, in quest'ordine: **licenza compatibile** con l'uso previsto, qualità
+sull'italiano, **tempo di elaborazione sull'hardware reale del PC**, possibilità di
+condizionare il riconoscimento con un glossario (F3), consumo di RAM. Nessun
+lock-in: interfacce `SttProvider` e `TtsProvider` con due implementazioni ciascuna —
+quella eseguita sul server e quella di sistema Android, che è sempre anche il
+ripiego a server spento.
 
 **Infra/CI**
 GitHub Actions (lint, typecheck, test, build), EAS Build, canali
-`development | preview | production`, Sentry, feature flag server-driven, migrazioni
-DB automatiche con rollback testato.
+`development | preview | production`, feature flag serviti dal server di casa,
+migrazioni DB automatiche con rollback testato e **provato su una copia del database
+reale** prima di ogni rilascio: qui non c'è un fornitore che ripristina uno snapshot
+al posto tuo.
+
+**Osservabilità senza servizi esterni**: con il self-hosting, crash reporting e
+metriche non possono appoggiarsi a un servizio a pagamento. Raccogli i crash e i log
+strutturati **sul server di casa**, con rotazione e un limite di spazio, ed esponi
+una pagina di stato minimale (server su/giù, spazio disco, code di elaborazione
+vocale, ultimo backup) raggiungibile dal GM. Meno ricca di un servizio dedicato,
+sufficiente per sei persone, e coerente con il vincolo di non avere costi ricorrenti.
 
 **Distribuzione privata** (decisione §13-D4). Verifica i termini correnti dei
 programmi sviluppatore nello Sprint 0 e riporta i costi reali; questo è il quadro da
@@ -378,71 +476,77 @@ cui partire:
   gruppo, senza reinstallazioni. Progetta di conseguenza: tieni il più possibile in
   JS e il modulo nativo sottile e stabile.
 
-### §4-bis — Budget operativo: 20 €/mese (vincolo di progetto)
+### §4-bis — Esercizio self-hosted: nessun costo ricorrente, altri costi sì
 
-Decisione §13-D3: **tetto di 20 €/mese, tutto compreso**. Non è un obiettivo di
-risparmio, è un vincolo architetturale: determina la scelta dei motori vocali (F3,
-F4), i limiti sui media (F6) e la politica di retention. Trattalo come tratteresti
-un vincolo di memoria su un embedded.
+Decisione §13-D3/D9: **nessun abbonamento, nessun servizio a consumo.** Tutto gira sul
+PC di casa. Questo elimina il vincolo economico che governava la versione precedente
+di questo documento, e ne introduce altri tre che vanno guardati in faccia.
 
-**Metodo di calcolo da rifare con prezzi verificati nello Sprint 0** (riporta fonte e
-data; i prezzi cambiano e non devono essere copiati da qui):
+**1) "Nessun costo ricorrente" non significa "gratis". Significa che la bolletta
+sostituisce la fattura.**
+Fai il conto con i numeri reali del PC che userai, non con questi:
 
 ```
-scenario di riferimento (§13-D7): 1 tavolo, 6 giocatori, 2 sessioni/settimana × 3 h
-  = ~24 h/mese di sessione
-  di cui parlato effettivamente registrato come messaggio vocale: stimare ~25-30%
-  = ~6-7 h/mese di audio  ≈ 400 min
-  trascrizione: ~150 parole/min → ~60.000 parole/mese → ~380.000 caratteri
-costo_STT_mese   = 400 min × prezzo_al_minuto
-costo_TTS_mese   = 380.000 char × prezzo_per_carattere × quota_messaggi_riascoltati
-costo_storage    = GB accumulati (al netto della retention F6) × prezzo_GB
-costo_egress     = GB scaricati dai 6 device × prezzo_GB   ← la voce dimenticata
-costo_fisso      = hosting + DB + eventuale tier a pagamento
+consumo_mensile_kWh = potenza_media_W × 24 × 30 / 1000
+costo_mensile       = consumo_mensile_kWh × prezzo_kWh_della_tua_bolletta
 ```
 
-**Conclusioni, aggiornate con i listini verificati il 17/09/2026** (dettaglio e fonti
-in `docs/ttrpg-app/sprints/SPRINT-00.md` §4):
-1. **Lo STT è l'unica voce variabile che costa davvero; il TTS a questo volume è
-   gratuito.** Le quote mensili gratuite delle voci di sintesi commodity (ordine dei
-   milioni di caratteri) coprono ampiamente il fabbisogno di un tavolo privato
-   (~380.000 caratteri/mese). *Questa conclusione ha ribaltato l'ipotesi iniziale, che
-   dava il TTS come voce dominante: riverificala tu stesso prima di fidartene, i
-   listini cambiano.* Conseguenza operativa: **calibra il budget guard sullo STT**, e
-   sul TTS metti un tetto di sicurezza contro l'uso anomalo (risintesi in massa della
-   cronologia), non un risparmio quotidiano.
-2. **I provider TTS premium restano esclusi**, e con essi la conversione
-   speech-to-speech: lì il costo per minuto è di un altro ordine di grandezza e non
-   esistono quote gratuite comparabili. Resta valida la scelta di F4 backend B
-   (TTS di sistema + DSP) come default, ora però per ragioni di offline e latenza più
-   che di costo puro.
-3. **Attenzione al prezzo scontato in cambio del data logging**: alcuni listini
-   applicano una tariffa inferiore quando si concede al provider di usare l'audio per
-   migliorare i modelli. F9 lo vieta. Verifica sempre **quale tariffa si applica alla
-   configurazione conforme**, non quella in cima alla pagina.
-4. **La voce di costo che può davvero sfondare il tetto non è l'AI: è il backend.**
-   Il piano a pagamento di un servizio managed tipico supera da solo l'intero budget
-   mensile, mentre il piano gratuito sospende il progetto per inattività. Tratta la
-   scelta del backend come la decisione economica più importante dello Sprint 0.
-3. **Storage: scegli un provider object-storage con egress gratuito.** Con i video
-   allegati, il traffico in uscita verso 6 device può superare il costo dello storage
-   stesso. Questo singolo punto vale più di molte micro-ottimizzazioni.
-4. **Niente servizi con sospensione per inattività** su ciò che serve durante una
-   sessione, o il primo tiro della serata aspetta il cold start. Verifica il
-   comportamento dei tier gratuiti su questo punto specifico e documentalo.
-5. Preferisci il tier gratuito di un managed service a un VPS a pagamento **solo se**
-   i limiti reggono lo scenario; altrimenti un VPS minimale è più prevedibile. La
-   scelta va in un ADR con i numeri, non a intuito.
+Ordini di grandezza da verificare misurando (con un misuratore da presa, non a
+occhio):
+- Un PC desktop acceso 24/7 assorbe tipicamente diverse decine di watt a riposo. Su
+  base mensile può arrivare a **costare quanto o più dell'abbonamento cloud che si
+  voleva evitare**. Questo va detto chiaramente, non scoperto in bolletta.
+- Un mini-PC a basso consumo sta un ordine di grandezza sotto ed è la scelta
+  razionale per un servizio sempre acceso.
+- **Se il PC è già acceso 24/7 per altri motivi, il costo marginale è vicino a zero**
+  ed è il caso in cui questa scelta conviene senza discussione.
 
-**Requisiti implementativi del budget guard:**
-- Contatori persistiti server-side (`usage_counters`), per tavolo e per mese, con
-  reset a calendario e **verifica prima della chiamata** a pagamento, non dopo.
-- Prezzi unitari in configurazione, non hard-coded: quando il provider cambia
-  listino, si aggiorna un valore.
-- Dashboard con spesa corrente, proiezione a fine mese e ripartizione per feature.
-- Allarme all'80 % del tetto, degrado automatico al 100 %.
-- **Test automatico del degrado**: con budget simulato esaurito, l'app deve restare
-  pienamente funzionale a costo zero. È un test di accettazione, non una prova manuale.
+Non devi cambiare decisione: devi sapere quanto costa. Riporta il calcolo in
+`docs/costs.md` con la potenza misurata e il prezzo dell'energia reale.
+
+**2) Il costo vero non è in euro: è disponibilità e rischio di perdita dei dati.**
+Un PC di casa non è un datacenter. Va progettato sapendo che:
+- **Se il server è spento o la linea è giù, l'app non funziona per nessuno.** Con
+  sessioni programmate due volte a settimana è probabilmente accettabile, ma deve
+  essere **visibile**: l'app mostra uno stato di connessione al server chiaro e
+  comprensibile ("il server del tavolo non risponde"), mai un errore generico o una
+  rotella che gira per sempre.
+- La chat è offline-first (F2), quindi scrivere funziona comunque e i messaggi
+  partono al ritorno del server. **I dadi no**: F5 richiede un tiro autoritativo lato
+  server, e questo è voluto. Server irraggiungibile = niente tiri. **Non introdurre un
+  ripiego locale**: un tiro non verificabile che sembra un tiro verificabile è peggio
+  del non poter tirare. Mostra il motivo e basta.
+- **Il disco di quel PC è l'unica copia della campagna.** Un guasto cancella anni di
+  gioco. Vedi F11.
+
+**3) Il vincolo da sorvegliare cambia unità di misura: da euro a gigabyte.**
+Con la retention infinita (§13-D10) lo spazio cresce in modo monotono e non torna mai
+indietro. Il "budget guard" della versione precedente **non sparisce, cambia oggetto**:
+- Monitoraggio dello spazio su disco con soglie di avviso (80 % e 90 %), mostrate **al
+  GM dentro l'app**, non solo in un log che nessuno legge.
+- Statistiche per campagna: quanto occupa, ripartito fra media, audio e database, così
+  che il GM possa decidere cosa archiviare.
+- Comportamento definito a disco pieno: l'app deve **rifiutare gli upload con un
+  messaggio chiaro** e continuare a far funzionare chat e dadi. Un disco pieno non
+  deve corrompere il database né far cadere il servizio. Test di accettazione
+  obbligatorio, con disco saturato artificialmente.
+
+**4) Conseguenza positiva, ed è grossa: i motori vocali diventano locali e gratuiti.**
+Senza un costo per minuto da contenere, la strategia vocale migliora invece di
+peggiorare. Vedi F3 e F4: riconoscimento e sintesi vocale **eseguiti sul PC di casa**,
+a costo marginale nullo, con due vantaggi che il cloud non dava:
+- **Il glossario di campagna torna possibile.** Era la mitigazione principale del
+  rischio n.1 del progetto, ed era stata persa scegliendo il motore on-device di
+  Android, che non accetta vocabolari personalizzati. Un riconoscitore eseguito in
+  locale si può **condizionare con i nomi propri della campagna**. Questo è il
+  guadagno tecnico più importante dell'intera decisione di self-hosting.
+- **L'audio non esce mai dalla rete di casa.** F9 si semplifica drasticamente: niente
+  trasferimento a terzi, niente opt-out dall'addestramento, niente accordi sul
+  trattamento dei dati. Resta solo da dire chiaramente ai giocatori dove finiscono le
+  loro registrazioni: sul computer del GM.
+
+Il prezzo di questo vantaggio è la **latenza**, che dipende dall'hardware del PC e va
+misurata (SPIKE-1 e SPIKE-2 dello Sprint 0), non assunta.
 
 ### §4-ter — Baseline device: cosa significa "dal 2023 in poi" in pratica
 
@@ -572,11 +676,24 @@ Apri `docs/risks.md` e mantienilo aggiornato. Partenza obbligatoria:
    modulo audio nativo, un allineamento sbagliato si manifesta come crash all'avvio
    sui device Android più recenti, non come errore di build. Verifica in S0 su un
    device aggiornato, non in emulatore.
-3. **[MEDIO] Tetto di 20 €/mese** (§4-bis): un errore di stima sui prezzi unitari, o
-   una retention non implementata, fa saltare il budget in silenzio. Mitigazione:
-   budget guard server-side con verifica *prima* della chiamata, degrado automatico a
-   costo zero, allarme all'80 %, retention F6 come requisito e non come cleanup
-   rinviato.
+3. **[ALTO] Perdita dei dati della campagna** (§4-bis, F11): server in casa, disco
+   singolo, retention infinita, nessuna copia remota. Un guasto o un errore cancella
+   anni di gioco. È il rischio con la conseguenza peggiore di tutto il progetto,
+   perché a differenza di un bug non si ripara. Mitigazione: F11 per intero, con la
+   **prova di ripristino** già nello Sprint 0.
+3-bis. **[ALTO] Raggiungibilità del server di casa**: CGNAT dell'operatore (che
+   renderebbe impossibile l'inoltro delle porte), indirizzo IP che cambia,
+   interruzioni di corrente e di linea, PC spento. Mitigazione: tunnel in uscita
+   invece di porte aperte, riavvio automatico, stato di connessione chiaro in app.
+   **Da verificare per primo nello Sprint 0**: se la linea è sotto CGNAT, alcune
+   soluzioni sono escluse in partenza.
+3-ter. **[MEDIO] Capacità di calcolo del PC di casa**: trascrizione e sintesi vocale
+   girano sullo stesso computer, contemporaneamente, per sei persone. Mitigazione:
+   code con limite di concorrenza, dimensionamento del modello deciso misurando
+   (SPIKE-1/2), stato del lavoro visibile in chat.
+3-quater. **[MEDIO] Banda in salita della linea domestica** (F6): sei device che
+   scaricano media passano dall'upload di casa, che è tipicamente la frazione più
+   stretta. Mitigazione: limiti sulle dimensioni, compressione, misura reale in S0.
 4. **[MEDIO] Animazione 3D su Android di fascia media/bassa**: jank e consumo.
    Mitigazione: budget di performance fissato nello Sprint 0 sui device reali e
    fallback sprite pre-renderizzato.
@@ -626,11 +743,17 @@ strumenti di osservabilità.
 
 ## 10. Osservabilità
 
-Crash e performance (Sentry) con release health; eventi di prodotto (sessione aperta,
-vocale inviato, trascrizione corretta a mano, voce usata, tiro effettuato) anonimizzati;
-**dashboard costi per feature**: secondi STT, caratteri TTS, GB storage, GB egress,
-con allarme a soglia; log strutturati correlati da `trace_id` lungo tutta la pipeline
-audio.
+Tutto autoprodotto sul server di casa, senza servizi a pagamento (§4 Infra/CI).
+Raccolta dei crash dell'app con release health; eventi di prodotto (sessione aperta,
+vocale inviato, trascrizione corretta a mano, voce usata, tiro effettuato); log
+strutturati correlati da `trace_id` lungo tutta la pipeline audio, con rotazione e
+tetto di spazio.
+
+**Pagina di stato per il GM**, che è l'unico amministratore che questo sistema avrà:
+server raggiungibile, spazio su disco e proiezione di riempimento, lunghezza delle
+code vocali e tempo medio di elaborazione, esito e data dell'ultimo backup, versione
+in esecuzione. Deve essere leggibile dal telefono, perché è da lì che il GM se ne
+accorgerà, mezz'ora prima della sessione.
 
 ---
 
@@ -659,13 +782,13 @@ sprint sfora, **non comprimere la qualità**: riporta lo scostamento e rinegozia
 | Sprint | Tema | Contenuto | Esito atteso |
 |---|---|---|---|
 | **S0** | Fondazioni e spike | Monorepo, CI, EAS, design system minimo, schema DB, ADR stack, keystore, APK installato sui **device reali del gruppo**, `minSdk 33` + classificatore di fascia (§4-ter), verifica dell'allineamento a 16 KB delle librerie native, tabella costi §4-bis con prezzi verificati, **spike misurati**: STT Tier 0 vs Tier 1 su clip fantasy italiane, TTS di sistema + DSP vs TTS cloud, catena DSP Kotlin, 3D dadi e batteria sul device più debole; verifica licenze §8 e della libreria di pitch shifting | Decisioni provider chiuse con numeri; **verdetto esplicito: il Tier 0 basta o no** |
-| **S1** | Auth + tavoli + chat | F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) + push base "nuovo messaggio" | Il gruppo può già usarla come chat e darti feedback da qui in avanti |
+| **S1** | Server di casa + auth + chat | Compose completo sul PC reale, tunnel raggiungibile da rete esterna, backup automatico attivo (F11 parte 1), F1, F2 (testo, realtime, outbox offline, ordinamento, cronologia) + push base "nuovo messaggio" | Il gruppo può già usarla come chat, **da fuori casa**, e darti feedback da qui in avanti |
 | **S2** | Motore dadi | F5 parser + RNG verificabile + messaggio strutturato + test statistici e di sicurezza | Tiri corretti, provabili, non falsificabili |
 | **S3** | Scenografia dadi | F5 animazione 3D, haptics, SFX, fallback ridotto/sprite, budget performance | L'effetto "wow" senza jank |
-| **S4** | Voce → testo | F3 completo: registrazione, pipeline asincrona, glossario di campagna, editing, fallback | Il GM narra, il tavolo legge |
-| **S5** | Voci e modulazione | F4: modulo nativo DSP + TTS cloud, preset orco/nano/elfo/umano, player a doppia traccia, budget guard | Il tavolo ascolta i PNG |
+| **S4** | Voce → testo | F3 completo: registrazione, pipeline asincrona con coda sul server, riconoscimento locale condizionato dal glossario di campagna, editing, ripiego on-device | Il GM narra, il tavolo legge |
+| **S5** | Voci e modulazione | F4: modulo nativo DSP + sintesi neurale sul server con code, preset orco/nano/elfo/umano, player a doppia traccia, ripiego a TTS di sistema | Il tavolo ascolta i PNG |
 | **S6** | Media e rifiniture | F6 allegati, F7 notifiche complete, F8 minimo, F10 accessibilità | App completa sulle funzioni richieste |
-| **S7** | Hardening e v1.0 privata | F9 consenso e retention, sicurezza §9, osservabilità §10, tuning costi e batteria, **sessione di gioco reale da 3 h come test di accettazione**, bug bash, runbook di distribuzione | **v1.0 in mano al gruppo** |
+| **S7** | Hardening e v1.0 privata | F9 trasparenza, **F11 backup ed esportazione con prova di ripristino**, sicurezza §9 con focus sull'esposizione da casa, pagina di stato, tuning batteria, **sessione di gioco reale da 3 h come test di accettazione**, bug bash, runbook di distribuzione e di esercizio del server | **v1.0 in mano al gruppo** |
 | *S8+* | Post-1.0 | Voce live in tempo reale (room WebRTC + agent server-side), backend `sts`, iniziativa/turni, schede personaggio; **e, solo se si vuole pubblicare**: moderazione UGC completa, privacy policy, age gate, store listing (stimare 2 sprint) | roadmap successiva |
 
 **Ordine scelto e perché**: dadi e voce (S2–S5) vengono prima dei media perché sono
@@ -686,7 +809,21 @@ rami di compatibilità legacy e li sostituisce con il device tiering di §4-ter:
 scambio quasi alla pari in costo, ma **riduce il rischio**, che è il motivo per cui è
 una buona decisione. Diffida di chi te la vende come un anticipo di consegna.
 
-**Stima onesta**: 8 sprint = **16 settimane / ~4 mesi calendario** per un singolo
+**Effetto del self-hosting (§13-D9/D10) sul piano.** Due movimenti opposti, che quasi
+si annullano:
+- *Tolgono lavoro*: niente integrazione con provider cloud, niente budget guard né
+  contatori di spesa, niente job di retention, F9 dimezzato.
+- *Aggiungono lavoro*: confezionamento in compose, tunnel ed esposizione sicura,
+  esecuzione e dimensionamento dei motori vocali in locale con code e limiti di
+  concorrenza, osservabilità autoprodotta, e soprattutto **F11 per intero**, che
+  prima non esisteva.
+
+Saldo: **circa mezzo sprint in più**, da 16 a **~17 settimane**. Il cambiamento vero
+non è nel calendario ma nel **profilo di rischio**, che si sposta dal costo alla
+disponibilità e alla perdita dei dati — e questi ultimi, a differenza di uno
+sforamento di budget, non si recuperano.
+
+**Stima onesta**: ~8,5 sprint = **~17 settimane / ~4 mesi calendario** per un singolo
 senior a tempo pieno. L'Android-only fa risparmiare attrito reale (un solo modulo
 nativo, una sola catena di firma e distribuzione, nessuna review), ma lo restituisce
 in parte sotto forma di test sulla frammentazione dei motori vocali di sistema: il
@@ -715,15 +852,28 @@ Per ognuna è indicato il **default** che adotterò se non rispondi.
 - **D2 — Voce live o messaggi vocali asincroni?**
   Default: **asincrono push-to-talk** in v1 (coerente con il paradigma WhatsApp,
   costi e complessità molto inferiori); room live in S9+.
-- **D3 — Budget mensile per API cloud (STT/TTS) e chi paga?** → **DECISO: 20 €/mese
-  tutto compreso** (infrastruttura + AI + storage). Conseguenze in §4-bis, F3, F4, F6.
-  Sintesi: motori on-device a costo zero come default di prodotto, cloud come
-  opzione contabilizzata, retention dei media obbligatoria, provider premium esclusi.
+- **D3 — Budget mensile per servizi cloud?** → **SUPERATA da D9: nessun costo
+  ricorrente, nessun servizio a consumo.** Il tetto di 20 €/mese non è più il
+  vincolo di progetto; al suo posto valgono i vincoli di §4-bis (energia elettrica,
+  disponibilità, spazio su disco, capacità di calcolo). Il budget guard economico è
+  **cancellato**, non rinviato: non scrivere contatori di spesa.
 - **D4 — Distribuzione: store pubblici o cerchia privata?** → **DECISO: cerchia
   privata.** Nessuna pubblicazione sugli store in v1.0. Conseguenze già recepite in
   F8, F9, §4 e §12. Corollario vincolante: **progetta lo schema dati e i confini dei
   moduli in modo che l'apertura al pubblico resti possibile** senza riscritture
   (§F8), ma non pagare *ora* il costo di quella conformità.
+- **D9 — Dove gira il server?** → **DECISO: PC di casa dell'utente, esposto tramite
+  DNS dinamico, nessun servizio cloud a pagamento.** Conseguenze in §4 (backend,
+  tunnel, sicurezza), §4-bis, F3, F4, F9, F11 e nel registro dei rischi.
+  **Raccomandazione tecnica che accompagna la decisione**: esporre con un **tunnel in
+  uscita** anziché aprendo porte sul router. Risolve insieme il caso CGNAT, il
+  certificato TLS e la superficie di attacco verso la rete domestica. Il DNS dinamico
+  resta come indirizzo stabile, non come meccanismo di esposizione.
+- **D10 — Retention** → **DECISO: infinita.** Nessuna scadenza automatica; il GM
+  cancella o archivia a mano a fine avventura. Conseguenze: F11 (backup, esportazione,
+  cancellazione che libera spazio davvero) diventa requisito obbligatorio, e il
+  presidio si sposta dallo scadere del tempo al **monitoraggio dello spazio su disco**
+  (§4-bis punto 3).
 - **D5 — Piattaforme** → **DECISO: solo Android.** Nessun codice, configurazione o
   test iOS. Modulo nativo unico in Kotlin. Coerente con D3: la sola quota annuale
   Apple avrebbe eroso una frazione rilevante dei 20 €/mese.
@@ -805,43 +955,58 @@ un risultato** (test di sicurezza dedicato).
 ## Appendice C — Prompt breve (se ti serve una versione compatta)
 
 > Costruisci un'app mobile **Android** in React Native/Expo (TypeScript strict,
-> monorepo, un solo modulo nativo in Kotlin, `minSdk 33` — device dal 2023 in poi)
-> per giocare a giochi di ruolo da tavolo in remoto, con UX da app di messaggistica. **Vincolo economico vincolante: costo
-> operativo totale ≤ 20 €/mese**, che impone motori vocali on-device come default e
-> cloud solo come opzione contabilizzata con degrado automatico a costo zero.
+> monorepo, un solo modulo nativo in Kotlin, `minSdk 33` — device dal 2023 in poi) per
+> giocare a giochi di ruolo da tavolo in remoto, con UX da app di messaggistica.
+>
+> **Vincolo di esercizio: nessun costo ricorrente.** Il backend gira su un PC di casa,
+> confezionato in un unico `docker compose`, esposto con un **tunnel in uscita** e non
+> aprendo porte sul router (funziona anche sotto CGNAT, TLS incluso, superficie di
+> attacco verso la rete domestica ridotta). Riconoscimento e sintesi vocale sono
+> **eseguiti su quel PC**: nessun servizio cloud, l'audio non lascia la rete di casa,
+> e il glossario di campagna torna possibile. **Retention infinita**: niente scadenze
+> automatiche, ma backup automatico su un secondo disco, esportazione e importazione
+> di una campagna in archivio autoconsistente, cancellazione che libera davvero i byte
+> e sorveglianza dello spazio su disco sono requisiti, non extra.
+>
 > Funzioni: (1) chat di gruppo realtime offline-first per campagna, ordinamento
 > deterministico lato server e outbox persistente;
 > (2) messaggi vocali trascritti automaticamente in chat (solo trascrizione italiana,
-> nessuna traduzione): STT di sistema Android come default gratuito, STT cloud opt-in
-> con glossario di campagna entro budget, trascrizione sempre correggibile a mano;
+> nessuna traduzione): riconoscimento eseguito sul server e condizionato con il
+> glossario di campagna, motore di sistema Android come ripiego a server spento,
+> trascrizione sempre correggibile a mano;
 > (3) riproduzione con voci di personaggio selezionabili (orco, nano, elfo, umano)
 > tramite catena DSP nativa (pitch e formant shift su Oboe) applicata alla voce
-> registrata o al TTS di sistema, più TTS cloud commodity come opzione, dietro
-> un'unica interfaccia `VoiceTransform`;
+> registrata o alla sintesi neurale eseguita sul server, con il TTS di sistema come
+> ripiego, dietro un'unica interfaccia `VoiceTransform`;
 > (4) tiri di dado con notazione completa (`4d6kh3`, `2d20kh1`, modificatori, reroll,
-> exploding), RNG autoritativo server-side verificabile via commit/reveal del seed, e
-> animazione 3D che converge sul risultato già deciso dal server, resa su tre fasce
-> di prestazioni classificate a runtime (l'anno del device fissa il sistema operativo,
-> non la GPU) e alternativa non animata sempre disponibile; (5) allegati immagine e video con compressione, strip EXIF, URL
-> firmati, retention automatica e object storage senza costi di egress.
+> exploding), RNG autoritativo server-side verificabile via commit/reveal del seed,
+> animazione 3D che converge sul risultato già deciso dal server, resa su tre fasce di
+> prestazioni classificate a runtime (l'anno del device fissa il sistema operativo,
+> non la GPU) e alternativa non animata sempre disponibile;
+> (5) allegati immagine e video con compressione, strip EXIF, URL firmati,
+> deduplicazione su hash del contenuto e limiti tarati sulla banda in salita della
+> linea domestica.
+>
 > Distribuzione **privata a invito via APK**: nessuna pubblicazione sugli store,
 > quindi niente apparato di moderazione UGC, ma schema dati predisposto per
-> aggiungerlo senza migrazione distruttiva. Vincoli: chiavi AI solo server-side,
-> budget guard server-side verificato prima di ogni chiamata a pagamento, RLS +
-> check applicativi, consenso esplicito e revocabile sull'elaborazione cloud della
-> voce con fallback offline pienamente funzionante, rilevamento a runtime delle
-> capacità vocali del device (la frammentazione Android e' un rischio alto), nessun
-> marchio o contenuto Wizards of the Coast, i18n it/en, accessibilità AA. Lavora a
-> sprint di 2 settimane: a ogni fine sprint build installabile, metriche misurate,
-> ADR, scostamenti dal piano e stop per validazione.
+> aggiungerlo senza migrazione distruttiva. Vincoli: code con limite di concorrenza
+> sui motori vocali, comportamento definito a disco pieno, autorizzazione difesa in
+> profondità, trasparenza esplicita in app sul fatto che registrazioni e allegati
+> risiedono sul computer del GM, rilevamento a runtime delle capacità vocali del
+> device (la frammentazione Android resta un rischio), nessun marchio o contenuto
+> Wizards of the Coast, i18n it/en, accessibilità AA.
+>
+> Lavora a sprint di 2 settimane: a ogni fine sprint build installabile, metriche
+> misurate, ADR, scostamenti dal piano e stop per validazione.
 > Prima di scrivere codice: domande bloccanti, piano Sprint 0 con spike misurati e
-> tabella costi verificata.
+> verifica della raggiungibilità della linea di casa.
 
 ## Appendice D — Cosa NON promettere al committente
 
-- Modulazione vocale realistica a costo zero: con 20 €/mese si ottiene un effetto
-  scenico convincente (DSP), non il timbro di un doppiatore. La conversione
-  speech-to-speech, che avrebbe conservato la recitazione, è esclusa per budget.
+- Modulazione vocale realistica: si ottiene un effetto scenico convincente (DSP) e
+  una sintesi neurale dignitosa, non il timbro di un doppiatore. La conversione
+  speech-to-speech, che avrebbe conservato la recitazione, resta fuori dalla v1 — ora
+  per il carico sul PC di casa, non per il costo.
 - Trascrizione accurata sui nomi propri fantasy col solo motore on-device: il motore
   di sistema non accetta glossari personalizzati. La correzione a mano è parte del
   flusso, non un ripiego.
@@ -851,8 +1016,15 @@ un risultato** (test di sicurezza dedicato).
 - Che "telefoni recenti" significhi "telefoni potenti": un entry-level del 2023 rende
   meno di un top di gamma del 2021. La baseline fissa le API, non le prestazioni.
 - Animazione 3D fluida su qualunque Android senza un budget di performance e un fallback.
-- Che distribuzione privata e Android-only rendano il progetto "piccolo": insieme
-  tagliano circa uno sprint e mezzo su otto. Il costo sta nella pipeline audio, nel
-  realtime e nell'animazione, che non dipendono da quelle scelte.
+- Che distribuzione privata, Android-only e self-hosting rendano il progetto
+  "piccolo": nel saldo complessivo si resta a ~17 settimane. Il costo sta nella
+  pipeline audio, nel realtime e nell'animazione, che non dipendono da quelle scelte.
+- Che "nessun costo ricorrente" significhi gratis: un PC acceso 24/7 ha una bolletta,
+  e va calcolata sul consumo misurato (§4-bis).
+- Che il server di casa sia sempre raggiungibile: spegnimenti, blackout, guasti di
+  linea e CGNAT esistono, e a server giù l'app non funziona per nessuno.
+- Che la retention infinita sia senza conseguenze: sposta il problema dal tempo allo
+  spazio, e rende il backup l'unica cosa che separa il gruppo dalla perdita della
+  campagna.
 - Una v1 in "qualche settimana": il numero onesto è ~4 mesi per un senior; primo
   build davvero giocabile (chat + dadi) a ~8 settimane.
