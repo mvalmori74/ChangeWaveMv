@@ -11,12 +11,24 @@ const confiniFeature = {
   files: ['apps/mobile/src/features/*/**/*.{ts,tsx}'],
   rules: {
     'no-restricted-imports': ['error', {
-      patterns: [{
-        group: ['**/features/*/**', '@/features/*'],
-        message:
-          'Import fra feature vietato: una feature non conosce le altre. ' +
-          'Cio\' che serve a entrambe va in packages/shared.',
-      }],
+      patterns: [
+        {
+          // Forma con alias o percorso assoluto.
+          group: ['**/features/*/**', '@/features/*', '@/features/*/**'],
+          message:
+            'Import fra feature vietato: una feature non conosce le altre. ' +
+            'Cio\' che serve a entrambe va in packages/shared.',
+        },
+        {
+          // Forma relativa. Le feature sono strutturate features/<nome>/<strato>/file,
+          // quindi risalire di due livelli significa uscire dalla propria feature.
+          // '../modello/x' resta lecito: e' dentro la stessa feature.
+          group: ['../../*', '../../**'],
+          message:
+            'Import fra feature vietato (percorso relativo che esce dalla feature). ' +
+            'Usa packages/shared per cio\' che e\' condiviso.',
+        },
+      ],
     }],
   },
 };
@@ -49,6 +61,15 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
+  },
+  // Metro e Babel richiedono CommonJS: e' un vincolo degli strumenti, non una scelta.
+  {
+    files: ['**/metro.config.js', '**/babel.config.js', '**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { module: 'writable', require: 'readonly', __dirname: 'readonly', process: 'readonly' },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   confiniFeature,
   dominioPuro,

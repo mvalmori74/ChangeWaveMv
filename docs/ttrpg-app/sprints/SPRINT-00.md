@@ -408,3 +408,53 @@ scritto sbagliato.
   [Google Cloud Speech-to-Text](https://cloud.google.com/speech-to-text/pricing) ·
   [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) · [Supabase](https://supabase.com/pricing)
 - Prezzo dell'energia: **la tua bolletta**, non una media nazionale.
+
+---
+
+## 8. Reperti dello sprint (aggiornato in corsa)
+
+Annotazioni tecniche emerse lavorando, che valgono per tutti gli sprint successivi.
+
+### R1 — React Native 0.87: i tipi generati rompono lo stile
+
+**Sintomo**: qualunque stile, anche `{ backgroundColor: 'red' }`, viene rifiutato dal
+controllo di tipo con messaggi fuorvianti (`Did you mean 'backgroundClip'?`).
+
+**Causa**: RN 0.87 espone come tipi predefiniti quelli generati automaticamente dal
+codice Flow (`types_generated/`), in cui `ViewStyle` e `TextStyle` non contengono le
+proprietà attese. Non è un errore del nostro codice.
+
+**Soluzione adottata**: RN pubblica anche i tipi scritti a mano, raggiungibili tramite
+una condizione di risoluzione dedicata. In `apps/mobile/tsconfig.json`:
+
+```json
+"customConditions": ["react-native-legacy-deep-imports", "react-native"]
+```
+
+**Da rivalutare**: a ogni aggiornamento di SDK. Quando i tipi generati saranno
+corretti, questa riga va tolta — e va tolta consapevolmente, non dimenticata lì.
+
+### R2 — Convenzione: nessuno stile inline
+
+Conseguenza pratica di R1, ma buona pratica a prescindere: gli stili si dichiarano in
+`StyleSheet.create`, mai come oggetto scritto dentro il JSX. Per i temi chiaro e scuro
+si costruiscono **due fogli completi una volta sola** (`src/design/stili.ts`), invece
+di comporre colori a ogni render. Più veloce, e non urta i tipi.
+
+### R3 — La regola di confine fra feature aveva un buco
+
+La prima versione bloccava solo gli import con alias (`@/features/…`) e lasciava
+passare quelli relativi (`../../dadi/ui/Dado`): esattamente la forma che un editor
+genera da solo con il completamento automatico. Trovato dal test che verifica la
+regola, non a occhio.
+
+Conferma che vale la pena **testare le regole di lint architetturali come si testa il
+codice**: una regola che nessuno verifica è una regola che un giorno sarà aggirata
+senza che nessuno se ne accorga.
+
+### R4 — Metro in monorepo richiede configurazione esplicita
+
+Con pnpm, che usa collegamenti simbolici, Metro non risolve `@tabletop/shared` senza
+`watchFolders`, `nodeModulesPaths` e `unstable_enableSymlinks`. Già in
+`apps/mobile/metro.config.js`. Da verificare sul device: la risoluzione funziona in
+fase di compilazione dei tipi, ma Metro è un risolutore diverso e va provato davvero.
