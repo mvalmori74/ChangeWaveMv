@@ -58,7 +58,13 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        // Togliere una chiave con il rest destructuring e' una tecnica
+        // legittima, non una variabile dimenticata.
+        ignoreRestSiblings: true,
+      }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
