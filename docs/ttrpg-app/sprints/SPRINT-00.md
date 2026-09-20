@@ -42,13 +42,23 @@ preferisco dirlo prima.
 
 | # | Domanda | Perché blocca | Entro |
 |---|---|---|---|
-| **Q1** | **Che PC è?** Processore, RAM, scheda grafica dedicata sì/no, sistema operativo, ed è già acceso 24/7 per altri motivi? | Determina quale modello di riconoscimento e sintesi vocale può girare e con che tempi. È l'input di SPIKE-1 e SPIKE-2, cioè del rischio n.1 del progetto. | giorno 2 |
-| **Q2** | **La tua linea è sotto CGNAT?** Si verifica in due minuti: confronta l'indirizzo IP che vedi nell'interfaccia del router con quello che ti dice un sito "qual è il mio IP". **Se sono diversi, sei sotto CGNAT** e l'inoltro delle porte è impossibile. | Se lo sei, alcune soluzioni sono morte in partenza e il tunnel non è una preferenza ma l'unica strada. Cambia SPIKE-0. | giorno 2 |
+| **Q1** | **APERTA — "il PC va bene" non è dimensionabile.** Servono: processore, RAM, GPU dedicata sì/no, sistema operativo, e se è già acceso 24/7. Esegui `scripts/raccolta-ambiente.ps1` (Windows) o `.sh` (Linux/macOS): sola lettura, ~30 secondi, produce `ambiente.txt` da rimandarmi. | Determina quale modello di riconoscimento e sintesi può girare e con che tempi. È l'input di SPIKE-1 e SPIKE-2, cioè del rischio n.1. Fra una macchina con GPU recente e una CPU di qualche anno fa ballano **uno o due ordini di grandezza** sul tempo di trascrizione. | giorno 2 |
+| **Q2** | **RISPOSTA PARZIALE: fibra WindTre.** L'operatore è noto per usare CGNAT sulle linee residenziali, con indirizzo pubblico disponibile a pagamento (fonti non ufficiali, da confermare). **L'architettura a tunnel in uscita non ne è influenzata e resta valida in entrambi i casi.** La verifica serve solo a sapere se esiste un piano B: la fa lo stesso script di Q1, cercando indirizzi in `100.64.0.0/10` fra i primi hop. | Non blocca più l'architettura. Determina se l'inoltro di porte resta un'alternativa o è escluso. | giorno 2 |
 | **Q3** | **Registri tu le 20 clip di riferimento?** Ti do traccia e protocollo: ~30 minuti, la tua voce da GM, con nomi propri inventati. | È l'input del rischio n.1. Senza clip reali, il verdetto su F3 è un'opinione. | giorno 4 |
 | **Q4** | Quali telefoni Android ha il gruppo (modello + versione) e chi può installarci un APK di prova? | SPIKE-3 e SPIKE-4. Senza, i target di §3 non sono verificabili. | giorno 4 |
 | **Q5** | **Hai un secondo disco** (o un NAS, o un disco esterno sempre collegato) su cui scrivere i backup? E un misuratore di consumo da presa? | F11: un backup sullo stesso disco del server non è un backup. Il misuratore serve per §4. | giorno 6 |
 
-Q1 e Q2 sono le più urgenti: senza di esse non posso nemmeno dimensionare il server.
+Q1 è la più urgente e **l'unica ancora davvero aperta**: senza le caratteristiche del
+PC non posso scegliere il modello di riconoscimento vocale, e quindi non posso
+scrivere SPIKE-1. Lo script `scripts/raccolta-ambiente.ps1` risponde insieme a Q1 e Q2
+in mezzo minuto.
+
+**Nota sull'upload, che si è chiarita da sola.** Su fibra — sia FTTH sia mista
+rame — la banda in salita di una linea WindTre è di norma ampiamente sufficiente per
+sei persone che si scambiano mappe e ritratti. Il rischio §7 "banda in salita" scende
+da MEDIO a BASSO. Resta da misurare (lo script lo chiede) perché *ampiamente
+sufficiente* va confermato con un numero, e perché i video allegati restano il caso
+peggiore.
 
 ---
 
@@ -114,7 +124,7 @@ valido; misura della latenza e verifica che i WebSocket passino dal tunnel.
 | Esito CGNAT: sì/no | confronto IP router vs IP pubblico |
 | Latenza di andata e ritorno da rete mobile, p50 e p95 | 100 richieste dal telefono, fuori dalla rete di casa |
 | WebSocket: connessione stabile per 30 minuti senza cadute | test di tenuta |
-| Banda in salita misurata della linea | test dal PC, in orario serale (quello di gioco) |
+| Banda in salita misurata della linea | test dal PC, **in orario serale**, che è quello di gioco e quello peggiore |
 | Vincoli dei termini d'uso del tunnel sui file grandi | lettura e sintesi, non interpretazione a occhio |
 
 **AC**: `docs/infra/raggiungibilita.md` con i numeri e un verdetto: architettura
