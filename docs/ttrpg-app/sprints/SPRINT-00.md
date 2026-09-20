@@ -46,7 +46,7 @@ preferisco dirlo prima.
 | **Q2** | **CHIUSA come non necessaria.** Con il tunnel in uscita la presenza di CGNAT è ininfluente: conta solo se il giro completo funziona, e il server lo riporta nella pagina di stato. | non blocca più nulla | — |
 | **Q3** | **Registri tu le 20 clip di riferimento?** Ti do traccia e protocollo: ~30 minuti, la tua voce da GM, con nomi propri inventati. | È l'input del rischio n.1. Senza clip reali, il verdetto su F3 è un'opinione. | giorno 4 |
 | **Q4** | Quali telefoni Android ha il gruppo (modello + versione) e chi può installarci un APK di prova? | SPIKE-3 e SPIKE-4. Senza, i target di §3 non sono verificabili. | giorno 4 |
-| **Q5** | **Hai un secondo disco** (o un NAS, o un disco esterno sempre collegato) su cui scrivere i backup? E un misuratore di consumo da presa? | F11: un backup sullo stesso disco del server non è un backup. Il misuratore serve per §4. | giorno 6 |
+| **Q5** | **CHIUSA: backup rinviato per decisione dell'utente (20/09).** Il servizio è nel compose sotto profilo `backup`, spento. Nessun secondo disco necessario ora. | non blocca più nulla | — |
 
 **Aggiornamento del 20/09**: Q1 e Q2 sono state chiuse spostando il problema dentro il
 software invece di girarlo all'utente. Il server si autodiagnostica all'avvio e
@@ -57,8 +57,7 @@ step obbligatorio.
 È anche la soluzione tecnicamente migliore: resta corretta se il server viene spostato
 su un altro computer, cosa che una raccolta manuale fatta una volta non fa.
 
-Restano aperte **Q3 (le clip, attese per il weekend)** e **Q5 (il secondo disco per i
-backup)**.
+**Resta aperta solo Q3: le clip, attese per il weekend.**
 
 **Nota sull'upload, che si è chiarita da sola.** Su fibra — sia FTTH sia mista
 rame — la banda in salita di una linea WindTre è di norma ampiamente sufficiente per
@@ -477,7 +476,7 @@ fase di compilazione dei tipi, ma Metro è un risolutore diverso e va provato da
 | S0-03 Firma, distribuzione, OTA | 2 | 0 |
 | S0-04 SPIKE-0 raggiungibilità | 2 | 0 |
 | S0-05 Compose server | 2 | 1 — scritto e validato, mai eseguito sul PC reale |
-| S0-06 Backup e ripristino | 1 | 0,5 — script pronti, **ripristino mai eseguito** |
+| S0-06 Backup e ripristino | 1 | **rinviato a S7** per decisione dell'utente (20/09); codice pronto sotto profilo `backup` |
 | S0-07 SPIKE-1 trascrizione | 4 | 2 — strumenti, protocollo e tracce pronti, zero dati |
 | S0-08 SPIKE-2 voci | 2 | 1 — modulo nativo e interfaccia pronti, DSP da collegare |
 | S0-09 SPIKE-4 trappole native | 1 | 0 |

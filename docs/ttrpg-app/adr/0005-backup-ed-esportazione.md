@@ -1,6 +1,6 @@
 # ADR-005 — Backup ed esportazione della campagna
 
-- **Stato**: accettato per la strategia; formato dell'archivio da definire in S7
+- **Stato**: strategia accettata, **attuazione rinviata per decisione dell'utente (20/09/2026)**
 - **Data**: 2026-09-20
 - **Contesto**: §13-D9 e D10. Server sul PC di casa, retention infinita, cancellazione
   manuale. Il disco di quel PC è **l'unica copia** di anni di gioco.
@@ -11,15 +11,18 @@
 volontà: dump periodico del database più copia incrementale dei media su un
 **percorso su secondo disco**, configurato dentro il compose.
 
-Il compose **rifiuta di partire** se il percorso di backup non è impostato. Un server
-senza backup non deve sembrare funzionante.
+**Aggiornamento del 20/09/2026.** Su indicazione dell'utente il backup è **disattivato
+per ora**: il servizio sta nel compose sotto il profilo `backup` e si attiva con un
+comando, senza modifiche al codice. La scelta progettuale resta quella descritta qui;
+cambia solo quando entra in funzione. Conseguenza registrata come rischio R2
+accettato.
 
 ## La parte che conta davvero
 
-**Il ripristino va provato, non solo configurato.** Un backup mai ripristinato non è
-un backup: è una cartella che cresce. Per questo la prova di ripristino è stata
-**anticipata da S7 allo Sprint 0**, con il tempo impiegato annotato nel runbook — così
-il giorno del guasto si sa quanto ci vorrà, invece di scoprirlo allora.
+**Il ripristino va provato, non solo configurato**, con il tempo impiegato annotato
+nel runbook: così il giorno del guasto si sa quanto ci vorrà, invece di scoprirlo
+allora. La prova era stata anticipata allo Sprint 0; con il backup disattivato torna
+a S7, insieme all'attivazione del profilo.
 
 Ogni backup porta un'impronta di verifica, e lo script di ripristino la controlla
 **prima** di sovrascrivere qualcosa.

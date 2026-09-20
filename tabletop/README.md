@@ -33,24 +33,34 @@ python3 test_wer.py && python3 test_dimensiona.py
 
 ```bash
 cd infra
-cp .env.example .env     # compila: password, PERCORSO_BACKUP su un SECONDO disco
+cp .env.example .env     # basta compilare POSTGRES_PASSWORD
 docker compose up -d
-docker compose --profile tunnel up -d    # quando hai il token del tunnel
 ```
 
-Stato: `http://localhost:8080/stato`
+Stato: `http://localhost:8080/stato` — riporta anche che macchina ha rilevato e quale
+modello di trascrizione propone.
 
-Il compose rifiuta di partire se manca la password o se `PERCORSO_BACKUP` non è
-impostato. È voluto: un server senza backup non deve sembrare funzionante.
+Servizi opzionali, attivabili quando servono:
 
-## Ripristino
+```bash
+docker compose --profile tunnel up -d    # accesso da fuori casa (serve TOKEN_TUNNEL)
+docker compose --profile backup up -d    # backup automatico (serve PERCORSO_BACKUP)
+```
+
+Il compose rifiuta di partire solo se manca la password del database.
+
+## Backup — disattivato per scelta
+
+Il servizio di backup e lo script di ripristino esistono e funzionano, ma sono
+**spenti di default** per decisione presa il 20/09/2026. Si accendono con il profilo
+`backup` senza modificare nulla.
+
+Finché resta spento, il disco del server è l'unica copia dei dati: vedi R2 in
+`docs/risks.md`.
 
 ```bash
 cd infra && ./backup/ripristina.sh /percorso/backup/20260920-030000
 ```
-
-**Da eseguire almeno una volta in Sprint 0**, su un'installazione vuota, annotando il
-tempo nel runbook. Un backup mai ripristinato non è un backup.
 
 ## Due scelte che vale la pena conoscere
 

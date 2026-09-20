@@ -6,7 +6,7 @@ poco probabile ma irreversibile pesa più di uno frequente e rimediabile.
 | # | Rischio | Livello | Stato |
 |---|---|---|---|
 | R1 | Qualità della trascrizione sui nomi propri inventati | **ALTO** | aperto, misura SPIKE-1 |
-| R2 | Perdita dei dati della campagna | **ALTO** | mitigato in parte, prova mancante |
+| R2 | Perdita dei dati della campagna | **ALTO** | **accettato consapevolmente**, non mitigato |
 | R3 | Raggiungibilità del server di casa | MEDIO | mitigato per progetto, verifica SPIKE-0 |
 | R4 | Frammentazione Android su motori vocali di sistema | MEDIO | aperto |
 | R5 | Capacità di calcolo del PC di casa | MEDIO | aperto, misura SPIKE-1/2 |
@@ -36,12 +36,20 @@ nasconde dietro un WER complessivo lusinghiero.
 Server in casa, disco singolo, retention infinita, nessuna copia remota. È il rischio
 con la conseguenza peggiore del progetto: a differenza di un bug, **non si ripara**.
 
-*Mitigazione*: F11 e ADR-005. Backup su secondo disco obbligatorio, impronta di
-verifica, esportazione della campagna in archivio leggibile anche senza l'app.
+*Mitigazione disponibile*: F11 e ADR-005. Backup su secondo disco, impronta di
+verifica, esportazione della campagna in archivio leggibile anche senza l'app. Il
+codice esiste ed è pronto.
 
-*Stato*: gli script esistono e il compose rifiuta di partire senza percorso di backup.
-**Manca la cosa che conta: un ripristino eseguito davvero.** Finché non avviene, il
-rischio resta ALTO — un backup non provato è una cartella che cresce.
+*Stato al 20/09/2026*: **il backup è disattivato per decisione dell'utente.** Il
+servizio è presente nel compose sotto il profilo `backup` e si accende con un
+comando, senza modifiche. Finché resta spento, il disco del server è l'unica copia.
+
+*Perché resta ALTO e non declassato*: il livello misura la conseguenza, non la
+probabilità, e la conseguenza non è cambiata. Un rischio accettato resta un rischio;
+la differenza è che ora è una scelta registrata invece di una svista.
+
+*Riaprire quando*: arriva un secondo disco, oppure la prima campagna accumula
+abbastanza sessioni da rendere la perdita dolorosa.
 
 ## R3 — Raggiungibilità del server di casa · MEDIO
 

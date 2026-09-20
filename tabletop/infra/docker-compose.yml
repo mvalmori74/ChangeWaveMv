@@ -51,7 +51,11 @@ services:
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token "${TOKEN_TUNNEL:?manca TOKEN_TUNNEL in .env}"
+    # Nota: Compose interpola TUTTI i servizi, anche quelli con profilo non
+    # attivo. Un valore obbligatorio qui impedirebbe l'avvio del resto, quindi
+    # il token ha un segnaposto: se il profilo parte senza token, il motivo
+    # compare nei log del container invece di bloccare tutto lo stack.
+    command: tunnel --no-autoupdate run --token "${TOKEN_TUNNEL:-MANCA_TOKEN_TUNNEL_IN_ENV}"
     depends_on: [api]
     networks: [interna]
     profiles: [tunnel]
@@ -69,13 +73,16 @@ services:
     volumes:
       - ./backup/backup.sh:/backup.sh:ro
       - ./data/media:/dati:ro
-      # PERCORSO_BACKUP deve puntare a un SECONDO disco: una copia sullo stesso
-      # disco del server non e' un backup (master prompt F11).
-      - "${PERCORSO_BACKUP:?manca PERCORSO_BACKUP - deve puntare a un secondo disco}:/backup"
+      # PERCORSO_BACKUP dovrebbe puntare a un SECONDO disco: una copia sullo stesso
+      # disco del server non protegge da un guasto del disco (master prompt F11).
+      - "${PERCORSO_BACKUP:-./data/backup}:/backup"
     entrypoint: ["/bin/sh", "/backup.sh"]
     depends_on:
       db: { condition: service_healthy }
     networks: [interna]
+    # Disattivato per scelta (20/09/2026). Si attiva con:
+    #   docker compose --profile backup up -d
+    profiles: [backup]
     logging: *log
 
 networks:
