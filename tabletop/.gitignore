@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+infra/data/
+infra/backup/out/
+tools/stt-bench/out/
+tools/stt-bench/clips/
+__pycache__/
+*.pyc

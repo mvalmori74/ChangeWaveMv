@@ -1,0 +1,83 @@
+# Server di casa (master prompt §4, decisione D9).
+# Avvio:  docker compose up -d       Aggiornamento:  docker compose pull && docker compose up -d
+#
+# Nessuna porta pubblicata verso l'esterno se non attraverso il tunnel:
+# il router di casa resta chiuso.
+
+name: tavolo
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tavolo}
+      POSTGRES_USER: ${POSTGRES_USER:-tavolo}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?manca la password del database - copia .env.example in .env}"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    # Nessun "ports:": il database non e' raggiungibile fuori dalla rete dei container.
+    networks: [interna]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tavolo} -d ${POSTGRES_DB:-tavolo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: &log
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORTA: 8080
+      VERSIONE: ${VERSIONE:-sviluppo}
+      PERCORSO_DATI: /dati
+      DATABASE_URL: "postgres://${POSTGRES_USER:-tavolo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tavolo}"
+    volumes:
+      - ./data/media:/dati
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [interna]
+    # In sviluppo, per provare dalla LAN, togli il commento:
+    # ports: ["8080:8080"]
+    logging: *log
+
+  # Tunnel in uscita: nessuna porta aperta sul router, funziona anche sotto CGNAT.
+  # Il token si ottiene dal pannello del servizio scelto; senza token il profilo non parte.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token "${TOKEN_TUNNEL:?manca TOKEN_TUNNEL in .env}"
+    depends_on: [api]
+    networks: [interna]
+    profiles: [tunnel]
+    logging: *log
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-tavolo}
+      POSTGRES_DB: ${POSTGRES_DB:-tavolo}
+      ORE_FRA_BACKUP: ${ORE_FRA_BACKUP:-12}
+      GIORNI_CONSERVAZIONE_BACKUP: ${GIORNI_CONSERVAZIONE_BACKUP:-30}
+    volumes:
+      - ./backup/backup.sh:/backup.sh:ro
+      - ./data/media:/dati:ro
+      # PERCORSO_BACKUP deve puntare a un SECONDO disco: una copia sullo stesso
+      # disco del server non e' un backup (master prompt F11).
+      - "${PERCORSO_BACKUP:?manca PERCORSO_BACKUP - deve puntare a un secondo disco}:/backup"
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [interna]
+    logging: *log
+
+networks:
+  interna:
+    driver: bridge
