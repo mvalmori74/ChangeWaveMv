@@ -1,0 +1,36 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'it.tavolo.vocedsp'
+version = '0.1.0'
+
+android {
+  namespace 'it.tavolo.vocedsp'
+  compileSdk 36
+
+  defaultConfig {
+    minSdk 33
+    externalNativeBuild {
+      cmake {
+        // Allineamento a 16 KB delle pagine di memoria (rischio R8): sui device
+        // Android recenti un allineamento sbagliato si manifesta come crash
+        // all'avvio, non come errore di compilazione. Verifica in SPIKE-4.
+        arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+      }
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+  // Oboe, licenza Apache 2.0 (docs/licenses.md): sceglie da solo il percorso audio
+  // a minore latenza disponibile sul device.
+  implementation 'com.google.oboe:oboe:1.9.3'
+}

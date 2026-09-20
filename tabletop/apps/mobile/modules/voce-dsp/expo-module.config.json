@@ -1,0 +1,4 @@
+{
+  "platforms": ["android"],
+  "android": { "modules": ["it.tavolo.vocedsp.VoceDspModule"] }
+}

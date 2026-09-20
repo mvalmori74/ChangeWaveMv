@@ -458,3 +458,38 @@ Con pnpm, che usa collegamenti simbolici, Metro non risolve `@tabletop/shared` s
 `watchFolders`, `nodeModulesPaths` e `unstable_enableSymlinks`. Già in
 `apps/mobile/metro.config.js`. Da verificare sul device: la risoluzione funziona in
 fase di compilazione dei tipi, ma Metro è un risolutore diverso e va provato davvero.
+
+---
+
+## 9. Consuntivo parziale al 20/09/2026
+
+| Story | SP | Stato |
+|---|---|---|
+| S0-01 Monorepo e confini | 2 | **completato** — AC della regola di confine verificato da test |
+| S0-02 App Android | 3 | 2 — codice e configurazione pronti, manca l'APK su device |
+| S0-03 Firma, distribuzione, OTA | 2 | 0 |
+| S0-04 SPIKE-0 raggiungibilità | 2 | 0 |
+| S0-05 Compose server | 2 | 1 — scritto e validato, mai eseguito sul PC reale |
+| S0-06 Backup e ripristino | 1 | 0,5 — script pronti, **ripristino mai eseguito** |
+| S0-07 SPIKE-1 trascrizione | 4 | 2 — strumenti, protocollo e tracce pronti, zero dati |
+| S0-08 SPIKE-2 voci | 2 | 1 — modulo nativo e interfaccia pronti, DSP da collegare |
+| S0-09 SPIKE-4 trappole native | 1 | 0 |
+| S0-10 Licenze | 1 | **completato** |
+| | **20** | **~9,5** |
+
+**Scostamento e sua causa reale**: metà dello sprint è fatta, e la metà mancante è
+quasi interamente **lavoro che richiede hardware** — telefoni, il PC di casa, la linea
+domestica, una voce umana. Non è un ritardo di esecuzione: è la divisione del lavoro
+dichiarata in §0 fin dall'inizio.
+
+Due scostamenti di priorità, presi consapevolmente:
+- **CI spostata a S1** (~1 SP): fra automatizzare la build e sapere se il server è
+  raggiungibile, adesso vale di più la seconda.
+- **SPIKE-3 dadi spostato a inizio S2** (~2 SP): i rischi nuovi introdotti dal
+  self-hosting sono più alti di quello sull'animazione, e lo sprint dei dadi è
+  comunque S2.
+
+**Un rischio chiuso in anticipo**: R9 licenze. La libreria di pitch shifting più
+diffusa è GPL v2 e avrebbe obbligato a distribuire il sorgente dell'intera app; è
+stata sostituita con un'alternativa MIT prima di scrivere una riga di DSP. Il master
+prompt lo segnalava come bloccante se scoperto a S5.
