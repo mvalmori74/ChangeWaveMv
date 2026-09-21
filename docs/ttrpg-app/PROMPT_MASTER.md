@@ -62,8 +62,11 @@ cronologia, media e log dei tiri di dado.
 Ogni requisito ha ID stabile: usalo nei commit (`feat(F3): ...`) e nei test.
 
 ### F1 — Account, tavoli, membri
-- Registrazione/login: email magic link + Google Sign-In. Nessun Apple Sign-In:
-  senza build iOS, non serve.
+- Registrazione/accesso: **codice di invito monouso, poi token di dispositivo**
+  (ADR-009). Niente email, niente identità federate: entrambe richiederebbero un
+  fornitore esterno, e risolvono un problema — identificare uno sconosciuto — che in
+  una cerchia privata non esiste. Token conservati solo come impronta nel database;
+  inviti con scadenza, revocabili e limitati in frequenza.
 - Creazione tavolo, invito via link/QR con scadenza, ruoli `gm` | `player`,
   espulsione, abbandono, trasferimento GM.
 - Profilo: nickname, avatar, fuso orario, lingua.

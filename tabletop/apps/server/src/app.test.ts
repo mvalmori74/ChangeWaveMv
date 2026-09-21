@@ -9,6 +9,8 @@ import pg from 'pg';
 import { WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { ArchivioPostgres, applicaSchema } from './db/archivio.js';
+import { Accessi } from './auth/accessi.js';
+import { generaToken, impronta } from './auth/credenziali.js';
 import { creaApplicazione, type Applicazione } from './app.js';
 
 const URL_DB = process.env['DATABASE_URL_TEST'];
@@ -41,7 +43,9 @@ async function poolIsolato(url: string, schema: string): Promise<pg.Pool> {
 descrivi('API del tavolo, end-to-end', () => {
   let pool: pg.Pool;
   let app: Applicazione;
+  let accessi: Accessi;
   let base: string;
+  let token: string;
 
   beforeAll(async () => {
     pool = await poolIsolato(URL_DB!, 'prova_api');
@@ -54,7 +58,19 @@ descrivi('API del tavolo, end-to-end', () => {
     await pool.query('TRUNCATE messaggi, membri_campagna, campagne, utenti CASCADE');
     await pool.query('INSERT INTO utenti (id, soprannome) VALUES ($1, $2)', [AUTORE, 'GM']);
     await pool.query('INSERT INTO campagne (id, nome) VALUES ($1, $2)', [CAMPAGNA, 'Prova']);
-    app = creaApplicazione(new ArchivioPostgres(pool));
+    accessi = new Accessi(pool);
+    app = creaApplicazione(new ArchivioPostgres(pool), accessi);
+
+    // Sessione del GM creata direttamente: il percorso dell'invito ha i suoi test.
+    token = generaToken();
+    await pool.query(
+      'INSERT INTO sessioni (impronta, utente_id) VALUES ($1, $2)',
+      [impronta(token), AUTORE],
+    );
+    await pool.query(
+      'INSERT INTO membri_campagna (campagna_id, utente_id, ruolo) VALUES ($1, $2, $3)',
+      [CAMPAGNA, AUTORE, 'gm'],
+    );
     await new Promise<void>((r) => app.server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
   });
@@ -64,7 +80,7 @@ descrivi('API del tavolo, end-to-end', () => {
   const manda = (n: number, extra: Record<string, unknown> = {}) =>
     fetch(`${base}/campagne/${CAMPAGNA}/messaggi`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify({
         id: uuid(1000 + n), autoreId: AUTORE, tipo: 'testo',
         corpo: { testo: `messaggio ${n}` }, ...extra,
@@ -83,13 +99,16 @@ descrivi('API del tavolo, end-to-end', () => {
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ seq: 1, eraGiaPresente: true });
 
-    const cronologia = await (await fetch(`${base}/campagne/${CAMPAGNA}/messaggi`)).json();
+    const cronologia = await (await fetch(`${base}/campagne/${CAMPAGNA}/messaggi`,
+      { headers: { authorization: `Bearer ${token}` } })).json();
     expect(cronologia).toHaveLength(1);
   });
 
   it('rifiuta un corpo malformato con 400 e non con 500', async () => {
     const r = await fetch(`${base}/campagne/${CAMPAGNA}/messaggi`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{non json',
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: '{non json',
     });
     expect(r.status).toBe(400);
   });
@@ -102,20 +121,22 @@ descrivi('API del tavolo, end-to-end', () => {
 
   it('la cronologia si legge a pagine, in ordine di sequenza', async () => {
     for (let i = 1; i <= 5; i++) await manda(i);
-    const pagina = await (await fetch(
-      `${base}/campagne/${CAMPAGNA}/messaggi?dopo=2&limite=2`)).json() as { seq: number }[];
+    const pagina = await (await fetch(`${base}/campagne/${CAMPAGNA}/messaggi?dopo=2&limite=2`,
+      { headers: { authorization: `Bearer ${token}` } })).json() as { seq: number }[];
     expect(pagina.map((m) => m.seq)).toEqual([3, 4]);
   });
 
   it('rifiuta un limite di pagina fuori scala', async () => {
-    const r = await fetch(`${base}/campagne/${CAMPAGNA}/messaggi?limite=99999`);
+    const r = await fetch(`${base}/campagne/${CAMPAGNA}/messaggi?limite=99999`,
+      { headers: { authorization: `Bearer ${token}` } });
     expect(r.status).toBeGreaterThanOrEqual(400);
   });
 
   describe('WebSocket', () => {
     const apriWs = (dopo: number) => {
       const porta = (app.server.address() as AddressInfo).port;
-      return new WebSocket(`ws://127.0.0.1:${porta}/realtime?campagna=${CAMPAGNA}&dopo=${dopo}`);
+      return new WebSocket(`ws://127.0.0.1:${porta}/realtime?campagna=${CAMPAGNA}&dopo=${dopo}`,
+        { headers: { authorization: `Bearer ${token}` } });
     };
 
     const raccogli = (ws: WebSocket, quanti: number, entroMs = 3000) =>
@@ -178,7 +199,8 @@ descrivi('API del tavolo, end-to-end', () => {
 
     it('chiude la connessione se i parametri non sono validi', async () => {
       const porta = (app.server.address() as AddressInfo).port;
-      const ws = new WebSocket(`ws://127.0.0.1:${porta}/realtime?campagna=non-un-uuid`);
+      const ws = new WebSocket(`ws://127.0.0.1:${porta}/realtime?campagna=non-un-uuid`,
+        { headers: { authorization: `Bearer ${token}` } });
       const codice = await new Promise<number>((r) => ws.on('close', r));
       expect(codice).toBe(4000);
     });

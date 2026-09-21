@@ -40,6 +40,32 @@ fra guasto di rete e rifiuto del server, ripresa dopo la chiusura dell'app. 12 t
 
 ---
 
+### Accesso e autorizzazione (F1)
+
+Decisione in ADR-009: **codice di invito monouso, poi token di dispositivo**. Niente
+email né identità federate, che richiederebbero un fornitore esterno e risolvono un
+problema — identificare uno sconosciuto — che in una cerchia privata non esiste.
+
+- Codici a 12 caratteri su un alfabeto senza simboli confondibili, con scarto dei
+  valori che introdurrebbero bias; token e codici conservati **solo come impronta**.
+- Inviti monouso, con scadenza, revocabili; tentativi limitati in frequenza.
+- **Primo avvio**: su database vuoto il server crea il tavolo e stampa nei log il
+  codice per il primo GM. Senza, il server sarebbe inaccessibile: per creare un
+  invito serve essere GM, e per essere GM serve un invito.
+- **18 test di autorizzazione**, quelli che il master prompt chiede esplicitamente.
+
+Due scelte di risposta che meritano una riga:
+
+| Situazione | Risposta | Perché |
+|---|---|---|
+| Estraneo che chiede un tavolo | **404**, non 403 | dire "non sei membro" confermerebbe che il tavolo esiste a chi prova identificatori a caso |
+| Membro che non è GM | **403** | sa già che il tavolo esiste: non c'è nulla da nascondergli |
+| Codice di invito rifiutato | messaggio unico | distinguere "scaduto" da "inesistente" permetterebbe di esplorare lo spazio dei codici. Il motivo resta nei log |
+
+**L'espulsione revoca anche le sessioni.** Toglierlo dai membri non basta: con un
+token ancora valido continuerebbe a leggere la diretta finché non scade. C'è un test
+che lo verifica.
+
 ## Reperti
 
 ### R5 — I test dai sorgenti non vedono i bug di confezionamento
@@ -86,8 +112,8 @@ nel file.
 
 ## Da fare
 
-- [ ] Autenticazione e tavoli (F1): registrazione, inviti, ruoli, espulsione
-- [ ] Autorizzazione: un non membro non deve leggere nulla, verificato da test
+- [x] ~~Autenticazione e tavoli (F1)~~ — inviti, ruoli, espulsione
+- [x] ~~Autorizzazione verificata da test~~ — 18 test
 - [ ] Persistenza locale sul telefono (SQLite) e coda outbox collegata alla rete
 - [ ] Schermata di chat: elenco, invio, stati di consegna, indicatore di riconnessione
 - [ ] Notifiche push di base

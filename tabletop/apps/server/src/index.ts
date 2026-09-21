@@ -9,6 +9,8 @@ import { statfs } from 'node:fs/promises';
 import pg from 'pg';
 import { creaApplicazione } from './app.js';
 import { ArchivioPostgres, applicaSchema } from './db/archivio.js';
+import { Accessi } from './auth/accessi.js';
+import { primoAvvio } from './auth/primoAvvio.js';
 import { livelloDisco, messaggioPerIlGm } from './disco.js';
 import { profiloIniziale, spiegaEsposizione, valutaEsposizione } from './diagnosi.js';
 import { rilevaMacchina } from './rilevaMacchina.js';
@@ -43,11 +45,12 @@ console.warn(`profilo di trascrizione proposto: ${profilo.modelloIniziale} — $
 const pool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
 await applicaSchema(pool);
 const archivio = new ArchivioPostgres(pool);
+await primoAvvio(pool, process.env['NOME_CAMPAGNA'] ?? 'La mia campagna');
 
 // Le rotte di diagnosi restano qui, davanti a quelle dell'applicazione: devono
 // rispondere anche se il resto ha problemi, perche' sono il modo in cui il GM
 // scopre che li ha.
-const app = creaApplicazione(archivio, {
+const app = creaApplicazione(archivio, new Accessi(pool), {
   gestisciAltro(req, res) {
     const invia = (codice: number, corpo: unknown) => {
       res.writeHead(codice, { 'content-type': 'application/json; charset=utf-8' });

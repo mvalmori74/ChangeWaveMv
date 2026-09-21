@@ -13,6 +13,7 @@ conseguenze, e le condizioni in cui andrebbe rifatta.
 | [006](0006-rendering-dei-dadi.md) | Rendering dell'animazione dei dadi | proposto |
 | [007](0007-contenuti-di-regole-e-identita.md) | Contenuti di regole e identità | accettato |
 | [008](0008-nessun-redis.md) | Nessun Redis nella v1.0 | accettato |
+| [009](0009-accesso-senza-servizi-esterni.md) | Accesso senza servizi esterni | accettato |
 
 Gli ADR aperti lo sono **di proposito**: dipendono da misure che non sono ancora state
 fatte. Chiuderli adesso significherebbe scegliere per impressione.
