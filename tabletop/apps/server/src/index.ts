@@ -5,8 +5,10 @@
  *
  * Nessuna logica di dominio qui dentro: arriva in S1.
  */
-import { createServer } from 'node:http';
 import { statfs } from 'node:fs/promises';
+import pg from 'pg';
+import { creaApplicazione } from './app.js';
+import { ArchivioPostgres, applicaSchema } from './db/archivio.js';
 import { livelloDisco, messaggioPerIlGm } from './disco.js';
 import { profiloIniziale, spiegaEsposizione, valutaEsposizione } from './diagnosi.js';
 import { rilevaMacchina } from './rilevaMacchina.js';
@@ -38,48 +40,58 @@ console.warn(
 );
 console.warn(`profilo di trascrizione proposto: ${profilo.modelloIniziale} — ${profilo.motivo}`);
 
-const server = createServer((req, res) => {
-  const invia = (codice: number, corpo: unknown) => {
-    res.writeHead(codice, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(corpo));
-  };
+const pool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
+await applicaSchema(pool);
+const archivio = new ArchivioPostgres(pool);
 
-  if (req.url === '/salute') {
-    invia(200, { stato: 'vivo', versione: VERSIONE });
-    return;
-  }
+// Le rotte di diagnosi restano qui, davanti a quelle dell'applicazione: devono
+// rispondere anche se il resto ha problemi, perche' sono il modo in cui il GM
+// scopre che li ha.
+const app = creaApplicazione(archivio, {
+  gestisciAltro(req, res) {
+    const invia = (codice: number, corpo: unknown) => {
+      res.writeHead(codice, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(corpo));
+    };
 
-  if (req.url === '/stato') {
-    // Pagina di stato per il GM (master prompt §10): e' da qui che si accorgera'
-    // di un problema, mezz'ora prima della sessione.
-    void statoDisco().then((disco) =>
-      invia(200, {
-        versione: VERSIONE,
-        avviatoDa: Math.round(process.uptime()),
-        disco,
-        macchina,
-        profiloTrascrizione: profilo,
-        esposizione: {
-          esito: valutaEsposizione(TUNNEL_ATTIVO, null),
-          spiegazione: spiegaEsposizione(valutaEsposizione(TUNNEL_ATTIVO, null)),
-        },
-        codaVocaleInAttesa: 0,
-        ultimoBackup: null,
-      }),
-    );
-    return;
-  }
+    if (req.url === '/salute') {
+      invia(200, { stato: 'vivo', versione: VERSIONE });
+      return true;
+    }
 
-  invia(404, { errore: 'non trovato' });
+    if (req.url === '/stato') {
+      // Pagina di stato per il GM (master prompt §10): e' da qui che si accorgera'
+      // di un problema, mezz'ora prima della sessione.
+      void statoDisco().then((disco) =>
+        invia(200, {
+          versione: VERSIONE,
+          avviatoDa: Math.round(process.uptime()),
+          disco,
+          macchina,
+          profiloTrascrizione: profilo,
+          esposizione: {
+            esito: valutaEsposizione(TUNNEL_ATTIVO, null),
+            spiegazione: spiegaEsposizione(valutaEsposizione(TUNNEL_ATTIVO, null)),
+          },
+          clientCollegati: app.hub.numeroIscritti,
+          codaVocaleInAttesa: 0,
+          ultimoBackup: null,
+        }),
+      );
+      return true;
+    }
+
+    return false;
+  },
 });
 
-server.listen(PORTA, () => {
+app.server.listen(PORTA, () => {
   console.warn(`server in ascolto sulla porta ${PORTA} (versione ${VERSIONE})`);
 });
 
 for (const segnale of ['SIGTERM', 'SIGINT'] as const) {
   process.on(segnale, () => {
     console.warn(`ricevuto ${segnale}, chiusura ordinata`);
-    server.close(() => process.exit(0));
+    void app.chiudi().then(() => pool.end()).then(() => process.exit(0));
   });
 }

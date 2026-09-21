@@ -18,12 +18,32 @@ const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0
 const CAMPAGNA = uuid(1);
 const AUTORE = uuid(2);
 
+/**
+ * Ogni file di test lavora in uno schema Postgres suo.
+ *
+ * Vitest esegue i file in parallelo: senza isolamento due file che azzerano le
+ * stesse tabelle si cancellano i dati a vicenda, e i test falliscono solo
+ * nell'esecuzione completa — il tipo di guasto che fa perdere un pomeriggio perche'
+ * ogni file, provato da solo, passa.
+ */
+async function poolIsolato(url: string, schema: string): Promise<pg.Pool> {
+  const iniziale = new pg.Pool({ connectionString: url, max: 1 });
+  await iniziale.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await iniziale.query(`CREATE SCHEMA ${schema}`);
+  await iniziale.end();
+  return new pg.Pool({
+    connectionString: url,
+    max: 10,
+    options: `-c search_path=${schema}`,
+  });
+}
+
 descrivi('archivio dei messaggi su Postgres', () => {
   let pool: pg.Pool;
   let archivio: ArchivioPostgres;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: URL, max: 10 });
+    pool = await poolIsolato(URL!, 'prova_archivio');
     await applicaSchema(pool);
   });
 

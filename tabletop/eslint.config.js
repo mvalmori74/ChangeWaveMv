@@ -68,6 +68,14 @@ export default tseslint.config(
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
+  // Script di build: girano in Node, fuori dal codice dell'applicazione.
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly', URL: 'readonly' },
+    },
+    rules: { 'no-console': 'off' },
+  },
   // Metro e Babel richiedono CommonJS: e' un vincolo degli strumenti, non una scelta.
   {
     files: ['**/metro.config.js', '**/babel.config.js', '**/*.cjs'],
