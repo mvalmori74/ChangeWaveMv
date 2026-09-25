@@ -89,9 +89,13 @@ jobs:
               --target "$GITHUB_SHA"
           fi
           # Rimuove gli APK delle build precedenti che usavano un nome numerato,
-          # cosi' sulla pagina resta un solo file da scaricare.
-          gh release view "$TAG" --json assets --jq '.assets[].name' \
-            | grep -v '^dungeon-d20-debug\.apk$' \
-            | while read -r stale; do
-                [ -n "$stale" ] && gh release delete-asset "$TAG" "$stale" --yes
-              done
+          # cosi' sulla pagina resta un solo file da scaricare. Quando non c'e'
+          # nulla da rimuovere grep esce con codice 1: va neutralizzato, altrimenti
+          # con `set -o pipefail` il passo fallisce a release gia' aggiornata.
+          stale="$(gh release view "$TAG" --json assets --jq '.assets[].name' | grep -v '^dungeon-d20-debug\.apk$' || true)"
+          if [ -n "$stale" ]; then
+            echo "$stale" | while read -r name; do
+              echo "Rimuovo l'asset obsoleto: $name"
+              gh release delete-asset "$TAG" "$name" --yes
+            done
+          fi
