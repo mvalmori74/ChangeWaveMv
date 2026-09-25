@@ -41,7 +41,10 @@ L'ambiente di sviluppo non ha Android SDK e la sua policy di rete blocca
 GitHub Actions. Ad ogni push sul ramo di sviluppo la pipeline esegue i test del
 motore, costruisce l'APK di debug e aggiorna una release con link diretto:
 
-**https://github.com/mvalmori74/ChangeWaveMv/releases/tag/dungeon-apk-latest**
+**Link diretto (sempre aggiornato all'ultima build):**
+https://github.com/mvalmori74/ChangeWaveMv/releases/download/dungeon-apk-latest/dungeon-d20-debug.apk
+
+Pagina della release: https://github.com/mvalmori74/ChangeWaveMv/releases/tag/dungeon-apk-latest
 
 Installazione: scarica il file sul telefono e consenti l'installazione da origini
 sconosciute. È una build di **debug**, firmata con la chiave di debug di Android:
