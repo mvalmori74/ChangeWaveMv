@@ -15,8 +15,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        google()
         mavenCentral()
+        google()
     }
 }
 
@@ -39,6 +39,10 @@ val includeAndroid = when (explicitSkip) {
     "false" -> true
     else -> sdkDetected
 }
+
+// Il build script del root legge questa property per decidere se mettere
+// l'Android Gradle Plugin sul classpath della build.
+System.setProperty("dungeon.androidEnabled", includeAndroid.toString())
 
 if (includeAndroid) {
     include(":app")

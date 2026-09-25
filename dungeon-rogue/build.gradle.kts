@@ -1,14 +1,32 @@
-// I plugin sono dichiarati qui con `apply false` per fissarne la versione una
-// volta sola per tutta la build: i moduli li applicano senza ridichiarare la
-// versione, evitando il conflitto "plugin already on the classpath".
+// Tutti i plugin della build stanno sullo stesso classpath (quello del progetto
+// root): il plugin Kotlin per Android carica per riflessione classi dell'Android
+// Gradle Plugin, quindi i due devono vivere nel medesimo classloader. Dichiararli
+// in moduli diversi con la DSL `plugins {}` li separa in scope annidati e produce
+// "Could not generate a decorated class for type KotlinAndroidTarget".
 //
-// L'Android Gradle Plugin NON compare qui di proposito: si scarica solo da
-// Google Maven e il modulo :app e' opzionale (vedi settings.gradle.kts), quindi
-// dichiararlo nel root impedirebbe di compilare :core dove Google Maven non e'
-// raggiungibile.
-plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.android) apply false
-    alias(libs.plugins.kotlin.serialization) apply false
-    alias(libs.plugins.compose.compiler) apply false
+// AGP viene messo sul classpath solo quando il modulo :app fa parte della build
+// (decisione presa in settings.gradle.kts, che la comunica via system property):
+// si scarica unicamente da Google Maven, e il motore deve restare compilabile
+// anche dove quel dominio non e' raggiungibile.
+buildscript {
+    // ATTENZIONE: queste versioni devono restare allineate a gradle/libs.versions.toml
+    // (il version catalog non e' accessibile dentro il blocco buildscript).
+    val kotlinVersion = "2.0.21"
+    val androidGradlePluginVersion = "8.7.2"
+    val androidEnabled = System.getProperty("dungeon.androidEnabled") == "true"
+
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+        if (androidEnabled) google()
+    }
+
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("org.jetbrains.kotlin:kotlin-serialization:$kotlinVersion")
+        classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:$kotlinVersion")
+        if (androidEnabled) {
+            classpath("com.android.tools.build:gradle:$androidGradlePluginVersion")
+        }
+    }
 }

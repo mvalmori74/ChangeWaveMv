@@ -1,8 +1,8 @@
 plugins {
     `java-library`
     application
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
+    id("org.jetbrains.kotlin.jvm")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 kotlin {
