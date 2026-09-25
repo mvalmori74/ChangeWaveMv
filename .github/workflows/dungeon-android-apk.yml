@@ -1,0 +1,78 @@
+name: Dungeon APK
+
+on:
+  push:
+    branches:
+      - 'claude/dungeon-**'
+    paths:
+      - 'dungeon-rogue/**'
+      - '.github/workflows/dungeon-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Test del motore di gioco
+        working-directory: dungeon-rogue
+        run: ./gradlew :core:test --no-daemon
+
+      - name: Build APK di debug
+        working-directory: dungeon-rogue
+        run: ./gradlew :app:assembleDebug --no-daemon -PskipAndroid=false
+
+      - name: Rinomina l'APK con il numero di build
+        id: apk
+        working-directory: dungeon-rogue
+        run: |
+          set -euo pipefail
+          src="$(find app/build/outputs/apk/debug -name '*.apk' | head -1)"
+          dest="dungeon-d20-debug-build${GITHUB_RUN_NUMBER}.apk"
+          cp "$src" "$dest"
+          echo "path=dungeon-rogue/$dest" >> "$GITHUB_OUTPUT"
+          echo "name=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Pubblica l'APK come artifact della build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dungeon-d20-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+      # La release rende l'APK scaricabile con un link diretto, senza dover
+      # entrare nella pagina della singola esecuzione della action.
+      - name: Aggiorna la release scaricabile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          TAG="dungeon-apk-latest"
+          NOTES="APK di debug generato automaticamente dal commit ${GITHUB_SHA}.
+          Installazione: scarica il file sul telefono e consenti l'installazione da origini sconosciute.
+          Si tratta di una build di debug firmata con la chiave di debug di Android: non pubblicabile sul Play Store."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            gh release edit "$TAG" --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" "$APK" \
+              --title "Dungeon d20 - APK di debug" \
+              --notes "$NOTES" \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
