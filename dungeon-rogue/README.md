@@ -32,19 +32,35 @@ Dichiarazione onesta, prima di tutto il resto.
 |---|---|---|
 | `:core` — motore di regole, dungeon, IA, salvataggi | **completo e funzionante** | 77 test JUnit 5 verdi, più 60 partite complete giocate da un bot |
 | Runner testuale JVM (`:core:run`) | **completo e funzionante** | partite reali eseguite end-to-end |
-| `:app` — interfaccia Android (Jetpack Compose) | **codice completo, mai compilato** | nessuna: vedi sotto |
+| `:app` — interfaccia Android (Jetpack Compose) | **compila e produce un APK installabile** | build automatica su GitHub Actions; **mai eseguita su un dispositivo** |
 
-L'ambiente in cui il progetto è stato sviluppato **non ha Android SDK e non ha accesso a
-`dl.google.com`** (Google Maven), quindi Android Gradle Plugin, librerie AndroidX e Compose
-non sono scaricabili e il modulo `:app` non è stato compilato né eseguito. Il codice UI è
-scritto con API stabili e conservative (Compose BOM 2024.10.01, Material 3), ma **va messo in
-conto un ciclo di correzione errori di compilazione alla prima build su una macchina con SDK**.
-È l'unico punto del progetto su cui non è stato possibile dare garanzie sperimentali.
+### Scarica l'APK
 
-Per questo il modulo `:app` viene **escluso automaticamente** dalla build quando l'SDK non
-c'è (vedi `settings.gradle.kts`): `./gradlew :core:test` funziona ovunque.
+L'ambiente di sviluppo non ha Android SDK e la sua policy di rete blocca
+`dl.google.com`, quindi la compilazione del modulo `:app` è delegata ai runner di
+GitHub Actions. Ad ogni push sul ramo di sviluppo la pipeline esegue i test del
+motore, costruisce l'APK di debug e aggiorna una release con link diretto:
 
----
+**https://github.com/mvalmori74/ChangeWaveMv/releases/tag/dungeon-apk-latest**
+
+Installazione: scarica il file sul telefono e consenti l'installazione da origini
+sconosciute. È una build di **debug**, firmata con la chiave di debug di Android:
+va bene per provare il gioco, non è pubblicabile sul Play Store (servirebbe una
+build di release firmata con una chiave propria, vedi Sprint 4).
+
+Lo stesso APK è disponibile come artifact di ogni esecuzione del workflow
+`Dungeon APK`, con ritenzione di 30 giorni.
+
+### Cosa resta non verificato
+
+L'APK **compila e si impacchetta**, ma non è ancora stato installato né aperto su
+un dispositivo o un emulatore: non ci sono test strumentati, quindi eventuali
+errori di runtime (crash all'avvio, layout illeggibili su schermi piccoli,
+tocchi che non registrano) non sarebbero ancora emersi. La compilazione esclude
+gli errori di sintassi e di API, non quelli di comportamento.
+
+Primo collaudo consigliato: installare l'APK, creare un guerriero, scendere di un
+livello, salvare uscendo dall'app e riprendere la partita.
 
 ## 2. Architettura
 
@@ -132,7 +148,10 @@ cd dungeon-rogue
 Comandi del runner: `y k u / h . l / b j n` direzioni, `.` attendi, `>` scendi, `,` raccogli,
 `i` zaino, `q` bevi pozione, `f` incantesimo, `s` Recuperare Energie, `x` esci.
 
-### APK Android (richiede Android SDK + rete verso Google Maven)
+### APK Android
+
+Il modo più rapido è scaricarlo dalla release (vedi sezione 1). Per costruirlo in
+locale servono Android SDK e accesso a Google Maven:
 
 ```bash
 cd dungeon-rogue
@@ -142,6 +161,13 @@ cd dungeon-rogue
 
 Requisiti: Android Studio Ladybug o successivo, JDK 17, `compileSdk 35`, `minSdk 24`
 (Android 7.0 — copre oltre il 95% dei dispositivi attivi).
+
+Nota sulla struttura della build: le versioni dei plugin stanno nel blocco
+`buildscript` del progetto root e i moduli li applicano per id. Il plugin Kotlin
+per Android carica per riflessione classi dell'Android Gradle Plugin, quindi i due
+devono stare sullo stesso classloader; dichiararli in moduli diversi con la DSL
+`plugins {}` li separa e la build fallisce. AGP entra nel classpath solo quando
+`:app` fa parte della build, così il motore resta compilabile anche senza SDK.
 
 ---
 
@@ -213,7 +239,9 @@ Stima in giorni-uomo di uno sviluppatore senior che parta da zero, per parametra
 | Creazione personaggio, menu, schermata di fine partita | 1,0 | fatto |
 | Zaino, incantesimi, selezione bersaglio | 0,5 | fatto |
 | Persistenza atomica e ripresa della partita | 0,5 | fatto |
-| **Compilazione, correzione errori, collaudo su dispositivo** | **1,5** | **da fare** |
+| Pipeline di build automatica dell'APK su GitHub Actions | 0,5 | fatto |
+| Compilazione e correzione degli errori di build | 0,5 | fatto |
+| **Collaudo su dispositivo reale e correzione dei difetti di runtime** | **1,0** | **da fare** |
 
 ### Sprint 3 — Giocabilità e rifinitura (~9 gg/uomo, da fare)
 
@@ -229,13 +257,15 @@ con proprietà attive; due classi aggiuntive; incantesimi di 3° livello; firma 
 scheda Play Store, privacy policy, canale di test interno; telemetria anonima di
 bilanciamento (profondità di morte, cause) per chiudere il ciclo sulla difficoltà.
 
-**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~15 giorni-uomo**, di cui 9
-verificati sperimentalmente e 6 da validare alla prima compilazione Android.
+**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~16 giorni-uomo**, di cui 9
+verificati da test automatici, 6 verificati fino alla compilazione e al
+confezionamento dell'APK, e il collaudo sul dispositivo ancora da fare.
 
 ### Rischi residui (in ordine di probabilità)
 
-1. **Errori di compilazione del modulo `:app`** — probabilità alta, impatto basso: mezza
-   giornata di correzioni tipiche (import, firme Compose cambiate tra versioni).
+1. **Difetti di runtime dell'app** — probabilità media, impatto medio: l'APK compila ma
+   non è mai stato eseguito. I candidati tipici sono il primo avvio, la rotazione e il
+   ripristino del salvataggio.
 2. **Leggibilità dei glifi su schermi piccoli** — probabilità media: potrebbe servire
    passare da glifi ASCII a tile grafiche (2-3 gg aggiuntivi).
 3. **Difficoltà ancora sbilanciata sui livelli 5-10** — probabilità media: il bot non arriva
