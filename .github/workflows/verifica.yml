@@ -1,0 +1,118 @@
+name: Verifica
+
+# Solo il progetto tabletop/: nella radice del repository vive altro codice, che
+# questa pipeline non deve né costruire né rompere.
+on:
+  push:
+    branches: ['**']
+    paths: ['tabletop/**', '.github/workflows/verifica.yml']
+  pull_request:
+    paths: ['tabletop/**', '.github/workflows/verifica.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: tabletop
+
+concurrency:
+  # Un nuovo push annulla la verifica precedente sullo stesso ramo: aspettare il
+  # risultato di un commit già superato non serve a nessuno.
+  group: verifica-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifica:
+    name: Lint, tipi, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # Postgres vero, non un finto: i test di integrazione verificano lock di riga,
+      # transazioni concorrenti e sequenze senza buchi, comportamenti che esistono
+      # solo su un motore reale. La versione corrisponde a quella del compose.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: prova
+          POSTGRES_DB: tavolo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tabletop/pnpm-lock.yaml
+
+      - name: Installa le dipendenze
+        # --frozen-lockfile: se qualcuno aggiunge una dipendenza senza aggiornare il
+        # lockfile, la pipeline se ne accorge invece di risolverla per conto suo.
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Controllo dei tipi
+        run: pnpm typecheck
+
+      - name: Test
+        env:
+          DATABASE_URL_TEST: postgres://postgres:prova@localhost:5432/tavolo
+        run: pnpm test
+
+      - name: Build
+        # Non è una ripetizione del controllo dei tipi: la build copia anche le
+        # risorse non TypeScript in dist/. Senza questo passo il server si ferma
+        # all'avvio dentro il container, e i test non possono accorgersene perché
+        # girano dai sorgenti. È già successo (reperto R5 dello Sprint 1).
+        run: pnpm build
+
+      - name: L'artefatto costruito parte davvero
+        # Ultimo gradino: non basta che compili, deve avviarsi e rispondere.
+        env:
+          DATABASE_URL: postgres://postgres:prova@localhost:5432/tavolo_avvio
+          PORTA: 8099
+          PERCORSO_DATI: /tmp
+        run: |
+          PGPASSWORD=prova createdb -h localhost -U postgres tavolo_avvio
+          node apps/server/dist/index.js & SERVER=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8099/salute > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8099/salute | tee /dev/stderr | grep -q '"stato":"vivo"'
+          curl -sf http://127.0.0.1:8099/stato  > /dev/null
+          kill $SERVER
+
+  test-di-integrazione-saltati:
+    name: I test si saltano senza database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tabletop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Test senza DATABASE_URL_TEST
+        # Chi lavora sul progetto deve poter eseguire i test senza installare
+        # Postgres. Questo lavoro verifica che quella promessa resti vera: senza,
+        # il giorno che qualcuno dimentica una guardia, se ne accorgerebbe solo
+        # un nuovo arrivato, e nel modo peggiore.
+        run: pnpm test
