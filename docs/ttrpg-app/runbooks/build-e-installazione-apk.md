@@ -96,8 +96,39 @@ adb devices      # deve elencare il telefono come "device", non "unauthorized"
 
 ## 3. L'indirizzo del server
 
-Il telefono deve sapere dove cercare il server. Per la prima prova si usa la rete di
-casa, senza tunnel.
+### Telefono e PC devono stare sulla stessa rete?
+
+**No, e a regime non devono**: i giocatori non saranno a casa tua. Ma per la *prima*
+prova conviene, e vale la pena capire perché.
+
+| Caso | Telefono | Funziona? |
+|---|---|---|
+| **A — stessa rete Wi-Fi**, indirizzo locale | in casa, sul Wi-Fi | **sì**, ed è quello che useremo adesso |
+| **B — reti diverse, con tunnel** | ovunque: rete mobile, casa d'altri | **sì**, ed è la configurazione definitiva |
+| **C — reti diverse, senza tunnel** | fuori casa | **no**, e con questo operatore nemmeno aprendo porte sul router |
+
+Il caso **C** non funziona perché il telefono, fuori dalla rete di casa, non ha modo
+di raggiungere il tuo indirizzo privato. Con un operatore che usa CGNAT — quasi
+certamente il tuo — **non esiste proprio un indirizzo pubblico da raggiungere**:
+l'inoltro delle porte non avrebbe nulla su cui agire. È il motivo per cui ADR-003 ha
+scelto il tunnel prima ancora di sapere quale fosse il tuo operatore.
+
+Il caso **B** funziona perché è il server ad aprire la connessione **verso l'esterno**:
+si collega al servizio di tunnel, che gli assegna un indirizzo pubblico in HTTPS; il
+telefono contatta quell'indirizzo e il traffico scende fino al tuo PC. Nessuna porta
+aperta sul router.
+
+**Perché cominciamo dal caso A**: per isolare le variabili. Se la prima prova non
+funziona, il problema è nell'app o nel server — non nel tunnel, non nel certificato,
+non nel servizio esterno. Una cosa alla volta. Il caso A è un ponteggio per il
+collaudo, non una configurazione d'uso.
+
+Quando passerai al caso B, **anche il tuo telefono in casa passerà dal tunnel**. Il
+traffico esce e rientra, costa qualche millisecondo in più, e si guadagna la cosa che
+conta: **una sola build per tutti**, tu e i giocatori, invece di due configurazioni da
+tenere allineate.
+
+### Per questa prima prova (caso A)
 
 Sul PC dove gira il server:
 
@@ -254,6 +285,31 @@ Mandami questi dati e chiudo tre story dello Sprint 0.
 
 ---
 
+## 8-bis. Passare al tunnel (quando la prima prova è andata bene)
+
+Solo dopo che il caso A funziona. Due passi:
+
+1. Sul PC, con il token del servizio di tunnel in `.env`:
+   ```powershell
+   cd tabletop\infra
+   docker compose --profile tunnel up -d
+   docker compose logs tunnel      # deve mostrare la connessione stabilita
+   ```
+2. Ricostruisci l'app con l'indirizzo pubblico:
+   ```powershell
+   cd tabletop\apps\mobile
+   $env:URL_SERVER = "https://tavolo.tuodominio"
+   npx expo prebuild --platform android          # senza --clean: vedi punto 5
+   cd android; .\gradlew assembleRelease
+   ```
+
+Il traffico in chiaro si spegne da solo, perché l'indirizzo comincia per `https://`.
+
+Questa è la build da distribuire ai giocatori. Provala **prima** dalla rete mobile del
+tuo telefono, con il Wi-Fi spento: è l'unico modo di verificare davvero che il tunnel
+funzioni, perché restando sul Wi-Fi di casa non sapresti se stai passando da lì o
+dalla rete locale.
+
 ## 9. Se qualcosa non va
 
 | Sintomo | Causa quasi certa |
@@ -263,7 +319,8 @@ Mandami questi dati e chiudo tre story dello Sprint 0.
 | Gradle si lamenta della versione di Java | hai la 21 o la 25 al posto della 17: controlla `JAVA_HOME` |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | il telefono ha già una versione firmata con un'altra chiave: disinstalla prima |
 | `INSTALL_FAILED_OLDER_SDK` | il telefono ha Android 12 o precedente: fuori baseline |
-| L'app dice "il server non risponde" | firewall di Windows, oppure `URL_SERVER` sbagliato al momento della build, oppure telefono su rete mobile invece che sul Wi-Fi di casa |
+| L'app dice "il server non risponde" (caso A) | firewall di Windows, oppure `URL_SERVER` sbagliato al momento della build, oppure **telefono su rete mobile invece che sul Wi-Fi di casa**: nel caso A devono stare sulla stessa rete |
+| L'app dice "il server non risponde" (caso B) | container del tunnel non avviato (`docker compose --profile tunnel up -d`), oppure token mancante in `.env` |
 | L'app si chiude appena si apre | probabile allineamento a 16 KB: mandami `adb logcat -d > log.txt` |
 
 Per qualunque cosa non elencata: `adb logcat -d > log.txt` con il telefono collegato,
