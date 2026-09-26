@@ -67,6 +67,9 @@ class AmbientMusicEngine(
 
     private var masterLowpass = 0.0
 
+    /** Strato ritmico del primo livello (stile ISLAND). */
+    private val island = IslandLayer(sampleRate, rng)
+
     private val delayLine = DoubleArray((DELAY_SECONDS * sampleRate).toInt().coerceAtLeast(1))
     private var delayIndex = 0
 
@@ -109,12 +112,14 @@ class AmbientMusicEngine(
         if (fadeIn < 1.0) fadeIn = (fadeIn + 1.0 / (FADE_IN_SECONDS * sampleRate)).coerceAtMost(1.0)
         val p = currentPalette()
 
+        // Peso dei due stili durante la transizione: entrambi vengono sempre
+        // generati e poi miscelati, cosi' le voci in decadimento non vengono
+        // troncate quando si passa da un livello all'altro.
+        val islandWeight = styleWeight()
         var mix = 0.0
-        mix += drone(p)
-        mix += pads(p)
-        mix += bellLayer(p)
-        mix += heartLayer(p)
-        mix += noiseLayer(p)
+        val cavern = drone(p) + pads(p) + bellLayer(p) + heartLayer(p) + noiseLayer(p)
+        mix += cavern * (1.0 - islandWeight)
+        mix += island.render(p) * islandWeight
 
         // Passa-basso a un polo: chiudendolo la musica diventa piu' cupa e lontana.
         val cutoff = p.lowpassHz.coerceIn(120.0, sampleRate / 2.2)
@@ -133,9 +138,16 @@ class AmbientMusicEngine(
         return limited * masterVolume * fadeIn
     }
 
+    private fun styleWeight(): Double {
+        val from = if (palette.style == MusicStyle.ISLAND) 1.0 - blend else 0.0
+        val to = if (targetPalette.style == MusicStyle.ISLAND) blend else 0.0
+        return (from + to).coerceIn(0.0, 1.0)
+    }
+
     /** Silenzia e azzera gli stati: da usare quando la musica viene spenta. */
     fun reset() {
         dronePhase.fill(0.0)
+        island.reset()
         padVoices.forEach { it.silence() }
         bell.silence()
         heart.active = false

@@ -2,6 +2,8 @@ package com.changewave.dungeon
 
 import com.changewave.dungeon.audio.AmbientMusicEngine
 import com.changewave.dungeon.audio.MusicDirector
+import com.changewave.dungeon.audio.MusicScale
+import com.changewave.dungeon.audio.MusicStyle
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -230,10 +232,109 @@ class MusicTest {
         assertTrue(abs(block.first().toInt()) < 400, "dopo il reset la musica deve entrare in dissolvenza")
     }
 
+    /**
+     * Inviluppo di energia del segnale su finestre da 20 ms, a media nulla.
+     * E' la base delle misure ritmiche: l'andamento dell'energia nel tempo.
+     */
+    private fun centeredEnvelope(samples: ShortArray, sampleRate: Int): DoubleArray {
+        val window = (sampleRate * 0.02).toInt()
+        val values = ArrayList<Double>()
+        var index = 0
+        while (index + window < samples.size) {
+            var energy = 0.0
+            for (i in index until index + window) {
+                val v = samples[i] / 32768.0
+                energy += v * v
+            }
+            values.add(sqrt(energy / window))
+            index += window
+        }
+        val mean = values.average()
+        return DoubleArray(values.size) { values[it] - mean }
+    }
+
+    private fun autocorrelation(envelope: DoubleArray, lagSeconds: Double): Double {
+        val lag = (lagSeconds / 0.02).toInt().coerceAtLeast(1)
+        if (lag >= envelope.size) return 0.0
+        val denominator = envelope.sumOf { it * it }.takeIf { it > 0.0 } ?: return 0.0
+        var numerator = 0.0
+        for (i in 0 until envelope.size - lag) numerator += envelope[i] * envelope[i + lag]
+        return numerator / denominator
+    }
+
+    /**
+     * Contrasto ritmico: autocorrelazione dell'inviluppo al periodo della
+     * semiminima rapportata a quella di un ritardo non musicale.
+     *
+     * Un brano ritmico ha un *picco* al battito e fondo piatto (misurato: 5-8).
+     * Un bordone continuo e' correlato a qualunque ritardo, quindi non ha picco
+     * e il rapporto resta vicino a 1 o sotto (misurato: ~0,8). E' il valore
+     * assoluto dell'autocorrelazione a non distinguere i due casi, non il
+     * rapporto: per questo la misura e' costruita cosi'.
+     */
+    private fun beatContrast(samples: ShortArray, sampleRate: Int, bpm: Double): Double {
+        val envelope = centeredEnvelope(samples, sampleRate)
+        val atBeat = autocorrelation(envelope, 60.0 / bpm)
+        val atReference = autocorrelation(envelope, 0.47)
+        return atBeat / maxOf(1e-6, atReference)
+    }
+
+    @Test
+    fun `il primo livello usa il tema d'avventura e non quello cavernoso`() {
+        val first = MusicDirector.paletteFor(1)
+        assertEquals(MusicStyle.ISLAND, first.style)
+        assertEquals(MusicScale.MIXOLYDIAN, first.scale)
+        assertEquals(0.0, first.macabreIndex, 0.001)
+        assertTrue(first.marimbaLevel > 0.0 && first.bassLevel > 0.0, "gli strati ritmici devono essere attivi")
+        assertTrue(first.heartLevel == 0.0 && first.noiseLevel == 0.0, "nel primo livello non ci sono battito e rumore")
+
+        for (depth in 2..MusicDirector.MAX_DEPTH) {
+            assertEquals(MusicStyle.CAVERN, MusicDirector.paletteFor(depth).style, "profondita' $depth")
+        }
+    }
+
+    @Test
+    fun `il primo livello e' ritmico, i livelli profondi sono continui`() {
+        val engine = AmbientMusicEngine()
+        val tempo = MusicDirector.paletteFor(1).tempoBpm
+        val island = beatContrast(render(1, 14.0), engine.sampleRate, tempo)
+        val cavern = beatContrast(render(9, 14.0), engine.sampleRate, tempo)
+        // Misurati su due semi: 5,5 e 7,7 per il tema ritmico, 0,79 per i bordoni.
+        assertTrue(island > 2.5, "il primo livello deve avere un battito riconoscibile: contrasto $island")
+        assertTrue(cavern < 1.5, "i livelli profondi devono restare continui: contrasto $cavern")
+    }
+
+    @Test
+    fun `il primo livello non e' piu' silenzioso degli altri`() {
+        val first = rms(render(1, 12.0))
+        val second = rms(render(2, 12.0))
+        assertTrue(first > second * 0.7, "livello 1 a $first contro livello 2 a $second: troppo sbilanciato")
+    }
+
+    @Test
+    fun `il passaggio dal primo al secondo livello non produce uno scatto`() {
+        val engine = AmbientMusicEngine(seed = 21, depth = 1)
+        engine.masterVolume = 0.85
+        val block = ShortArray(2048)
+        repeat(40) { engine.renderBlock(block) }
+        val before = block.last()
+        engine.setDepth(2)
+        engine.renderBlock(block)
+        assertTrue(abs(block.first() - before) < 6000, "salto di ${abs(block.first() - before)} fra i due stili")
+        // A transizione completata comanda lo stile cavernoso.
+        val frames = (AmbientMusicEngine.CROSSFADE_SECONDS * engine.sampleRate).toInt() + engine.sampleRate
+        var written = 0
+        while (written < frames) { engine.renderBlock(block); written += block.size }
+        assertEquals(MusicStyle.CAVERN, engine.currentPalette().style)
+    }
+
     @Test
     fun `la descrizione della tavolozza e' leggibile`() {
-        val text = MusicDirector.describe(10)
-        assertTrue(text.contains("diabolus"), text)
-        assertTrue(text.contains("100%"), text)
+        val deep = MusicDirector.describe(10)
+        assertTrue(deep.contains("diabolus"), deep)
+        assertTrue(deep.contains("100%"), deep)
+        val first = MusicDirector.describe(1)
+        assertTrue(first.contains("avventura"), first)
+        assertTrue(first.contains("96 bpm"), first)
     }
 }

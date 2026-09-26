@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
 private fun DungeonApp(viewModel: GameViewModel) {
     val state by viewModel.state.collectAsState()
     val audio by viewModel.audio.collectAsState()
+    val audioMessage by viewModel.audioMessage.collectAsState()
     when (val current = state) {
         is AppState.Menu -> MainMenuScreen(
             hasSave = current.hasSave,
@@ -62,8 +63,13 @@ private fun DungeonApp(viewModel: GameViewModel) {
         AppState.Settings -> SettingsScreen(
             settings = audio,
             currentDepth = viewModel.currentDepth(),
+            message = audioMessage,
             onMusicEnabledChange = viewModel::setMusicEnabled,
             onMusicVolumeChange = viewModel::setMusicVolume,
+            onCustomTrackPicked = viewModel::pickCustomTrack,
+            onCustomTrackCleared = viewModel::clearCustomTrack,
+            onCustomTrackDepthChange = viewModel::setCustomTrackDepth,
+            onMessageShown = viewModel::clearAudioMessage,
             onBack = viewModel::closeSettings,
         )
         AppState.Creation -> CharacterCreationScreen(

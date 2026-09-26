@@ -30,7 +30,7 @@ Dichiarazione onesta, prima di tutto il resto.
 
 | Componente | Stato | Verifica eseguita |
 |---|---|---|
-| `:core` — motore di regole, dungeon, IA, salvataggi, audio | **completo e funzionante** | 92 test JUnit 5 verdi, più 60 partite complete giocate da un bot |
+| `:core` — motore di regole, dungeon, IA, salvataggi, audio | **completo e funzionante** | 96 test JUnit 5 verdi, più 60 partite complete giocate da un bot |
 | Runner testuale JVM (`:core:run`) | **completo e funzionante** | partite reali eseguite end-to-end |
 | `:app` — interfaccia Android (Jetpack Compose) | **compila e produce un APK installabile** | build automatica su GitHub Actions; **mai eseguita su un dispositivo** |
 
@@ -155,9 +155,29 @@ battito cardiaco          │                            con riaccoppiamento)
 letto di rumore filtrato  ┘
 ```
 
+### Primo livello: tema d'avventura
+
+Il livello 1 non e' cavernoso: e' ancora "in superficie" e suona come una partenza,
+non come una tomba. Materiale melodico originale, generato da regole:
+
+- modo **misolidio** (maggiore con settima abbassata), giro armonico I - IV - v - IV;
+- arpeggio percussivo tipo marimba con **accenti in controtempo** — la sincope e'
+  cio' che da' il carattere caraibico a una sequenza altrimenti neutra;
+- basso camminante in semiminime su fondamentale, quinta e terza, shaker sui
+  contrattempi, 96 bpm;
+- melodia costruita su una cellula ritmica di due battute, ripetuta con variazioni
+  di altezza vincolate alla scala e agli accordi: e' la regola minima che
+  distingue una melodia da una sequenza casuale.
+
+Dal livello 2 comanda la progressione cavernosa descritta sotto. Il passaggio fra
+i due stili avviene miscelandoli durante la dissolvenza, quindi le voci in
+decadimento non vengono troncate.
+
+### Dal secondo livello in giu': la discesa
+
 Cosa cambia scendendo (`MusicDirector`, tutto monotono nella profondita'):
 
-| Parametro | Livello 1 | Livello 10 |
+| Parametro | Livello 2 | Livello 10 |
 |---|---|---|
 | Scala | eoliana (minore naturale) | costruita sul tritono |
 | Fondamentale | 55,0 Hz | 41,2 Hz |
@@ -167,10 +187,22 @@ Cosa cambia scendendo (`MusicDirector`, tutto monotono nella profondita'):
 | Letto di rumore | 5% | 38% |
 | Riaccoppiamento dell'eco | 0,30 | 0,72 |
 | Cluster di seconde minori | 5% delle note | 60% delle note |
-| Indice di macabrita' | 0% | 100% |
+| Indice di macabrita' | 6% | 100% |
 
 Il cambio di livello non e' uno stacco: i parametri migrano con una dissolvenza
 di 4 secondi, verificata da test.
+
+### Usare un proprio brano
+
+Dalle impostazioni si puo' scegliere **un file audio del telefono** come colonna
+sonora di un livello qualsiasi (per default il primo). Il file resta dove sta:
+l'app lo legge tramite il selettore di sistema con permesso persistente, non lo
+copia al proprio interno e non lo distribuisce. Se il file viene spostato,
+cancellato o non e' riproducibile, il gioco lo segnala e torna alla musica
+generata invece di restare muto.
+
+Questa e' anche la via corretta per usare musica di cui si possiedono i diritti:
+nulla di protetto entra nel repository o nell'APK.
 
 **Volume regolabile** dall'interfaccia: menu principale → *Impostazioni*, oppure
 in partita dalla scheda del personaggio. Interruttore di attivazione e cursore
@@ -285,7 +317,7 @@ Windows e Linux ogni file toccato comparirebbe come modificato per intero.
 
 ## 7. Verifica eseguita
 
-`./gradlew :core:test` — **92 test, tutti verdi**. Non solo unitari:
+`./gradlew :core:test` — **96 test, tutti verdi**. Non solo unitari:
 
 - **Proprietà del generatore** (30 livelli per esecuzione): connettività totale verificata a
   flood fill, scale sempre raggiungibili, nessun mostro/oggetto dentro un muro o sovrapposto,
@@ -295,11 +327,17 @@ Windows e Linux ogni file toccato comparirebbe come modificato per intero.
 - **Soak test**: 60 partite complete giocate da un bot, con invarianti controllate ogni 100
   turni (niente cadaveri sulla mappa, PF nei limiti, nessuna sovrapposizione).
 - **Salvataggi**: round-trip completo, e prosecuzione identica dopo il ricaricamento.
-- **Audio** (15 test): nessuna saturazione a nessuna profondità, RMS nell'intervallo
+- **Audio** (19 test): nessuna saturazione a nessuna profondità, RMS nell'intervallo
   utile, silenzio assoluto a volume zero, indipendenza dalla dimensione del blocco
   (nessun clic fra i buffer), nessun salto oltre soglia fra campioni consecutivi,
   transizione di profondità graduale e soglia minima di energia nella banda
-  riprodotta dagli altoparlanti dei telefoni.
+  riprodotta dagli altoparlanti dei telefoni. Il tema del primo livello è
+  verificato come **ritmico** misurando il contrasto di autocorrelazione
+  dell'inviluppo al periodo della semiminima: 5-8 per un brano suonato contro
+  ~0,8 per un bordone continuo. Il valore assoluto dell'autocorrelazione non
+  distingue i due casi — un bordone lento è correlato a qualunque ritardo — e
+  una prima versione del test, basata sul fattore di cresta, era troppo vicina
+  al valore misurato per essere affidabile.
 - **Prestazioni** (JVM desktop): turno completo **0,07 ms**, generazione di un livello
   **0,1 ms**. Anche con un fattore 10 su un telefono di fascia bassa si resta due ordini di
   grandezza sotto il budget di 16 ms per frame.
@@ -360,11 +398,13 @@ Stima in giorni-uomo di uno sviluppatore senior che parta da zero, per parametra
 | Compilazione e correzione degli errori di build | 0,5 | fatto |
 | **Collaudo su dispositivo reale e correzione dei difetti di runtime** | **1,0** | **da fare** |
 
-### Sprint 3 — Giocabilità e rifinitura (~9 gg/uomo, di cui ~2,5 svolti)
+### Sprint 3 — Giocabilità e rifinitura (~9 gg/uomo, di cui ~3,5 svolti)
 
 | Attività | gg | Stato |
 |---|---|---|
 | Sintetizzatore procedurale e progressione musicale per profondità | 1,5 | fatto |
+| Tema d'avventura originale per il primo livello (strato ritmico-melodico) | 0,5 | fatto |
+| Brano personalizzato dai file del telefono, per livello | 0,5 | fatto (da collaudare) |
 | Schermata impostazioni con volume regolabile e persistenza | 0,5 | fatto |
 | Riproduzione in streaming su Android (AudioTrack) e gestione del ciclo di vita | 0,5 | fatto (da collaudare) |
 | Playtest e taratura della difficoltà con giocatori reali | 2,0 | da fare |
@@ -381,8 +421,8 @@ con proprietà attive; due classi aggiuntive; incantesimi di 3° livello; firma 
 scheda Play Store, privacy policy, canale di test interno; telemetria anonima di
 bilanciamento (profondità di morte, cause) per chiudere il ciclo sulla difficoltà.
 
-**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~18,5 giorni-uomo**, di cui
-10,5 verificati da test automatici, 8 verificati fino alla compilazione e al
+**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~19,5 giorni-uomo**, di cui
+11 verificati da test automatici, 8,5 verificati fino alla compilazione e al
 confezionamento dell'APK, e il collaudo sul dispositivo ancora da fare.
 
 ### Rischi residui (in ordine di probabilità)

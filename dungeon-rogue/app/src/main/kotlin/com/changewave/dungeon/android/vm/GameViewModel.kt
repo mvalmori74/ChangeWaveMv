@@ -1,6 +1,9 @@
 package com.changewave.dungeon.android.vm
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.changewave.dungeon.android.audio.MusicPlayer
@@ -118,7 +121,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = SaveStore(application)
     private val settingsStore = SettingsStore(application)
-    private val music = MusicPlayer()
+    private val music = MusicPlayer(application)
     private var engine: GameEngine? = null
 
     private val _state = MutableStateFlow<AppState>(AppState.Menu(store.hasSave()))
@@ -130,8 +133,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** Schermata da cui si e' aperta la configurazione, per tornarci uscendo. */
     private var stateBeforeSettings: AppState? = null
 
+    /** Avvisi sull'audio da mostrare nelle impostazioni (es. brano non leggibile). */
+    private val _audioMessage = MutableStateFlow<String?>(null)
+    val audioMessage: StateFlow<String?> = _audioMessage.asStateFlow()
+
     init {
+        music.onCustomTrackFailed = { reason ->
+            // Il brano scelto non e' riproducibile: si torna alla musica generata
+            // e si dimentica il riferimento, che resterebbe rotto.
+            _audio.value = _audio.value.copy(customTrackUri = null, customTrackName = null)
+            settingsStore.save(_audio.value)
+            _audioMessage.value = "Brano personalizzato non riproducibile ($reason): torno alla musica del gioco."
+        }
         applyAudioSettings()
+    }
+
+    fun clearAudioMessage() {
+        _audioMessage.value = null
     }
 
     // --- audio ----------------------------------------------------------------
@@ -150,9 +168,41 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         applyAudioSettings()
     }
 
+    /**
+     * Registra il brano scelto dal selettore di sistema. Il permesso di lettura
+     * viene reso persistente, altrimenti al riavvio dell'app l'URI non sarebbe
+     * piu' accessibile.
+     */
+    fun pickCustomTrack(uri: Uri) {
+        val resolver = getApplication<Application>().contentResolver
+        runCatching {
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val name = resolveDisplayName(uri) ?: "brano scelto"
+        updateAudio(_audio.value.copy(customTrackUri = uri.toString(), customTrackName = name))
+        _audioMessage.value = null
+    }
+
+    fun clearCustomTrack() {
+        updateAudio(_audio.value.copy(customTrackUri = null, customTrackName = null))
+    }
+
+    fun setCustomTrackDepth(depth: Int) {
+        updateAudio(_audio.value.copy(customTrackDepth = depth.coerceIn(1, 10)))
+    }
+
+    private fun resolveDisplayName(uri: Uri): String? = runCatching {
+        getApplication<Application>().contentResolver
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+    }.getOrNull()
+
     private fun applyAudioSettings() {
         val settings = _audio.value
         music.setVolume(settings.musicVolume)
+        music.setCustomTrack(settings.customTrackUri?.let { Uri.parse(it) }, settings.customTrackDepth)
         music.setEnabled(settings.musicEnabled)
     }
 

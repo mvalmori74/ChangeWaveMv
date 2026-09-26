@@ -1,5 +1,8 @@
 package com.changewave.dungeon.android.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,12 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Card
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +43,20 @@ import com.changewave.dungeon.audio.MusicDirector
 fun SettingsScreen(
     settings: AudioSettings,
     currentDepth: Int,
+    message: String?,
     onMusicEnabledChange: (Boolean) -> Unit,
     onMusicVolumeChange: (Float) -> Unit,
+    onCustomTrackPicked: (Uri) -> Unit,
+    onCustomTrackCleared: () -> Unit,
+    onCustomTrackDepthChange: (Int) -> Unit,
+    onMessageShown: () -> Unit,
     onBack: () -> Unit,
 ) {
+    // Selettore di sistema: restituisce un URI di sola lettura sul file scelto,
+    // senza copiarlo dentro l'app.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onCustomTrackPicked(uri)
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -112,6 +129,61 @@ fun SettingsScreen(
             shape = RoundedCornerShape(10.dp),
         ) {
             Column(Modifier.padding(16.dp)) {
+                Text("Brano personalizzato", color = DungeonColors.Bone, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Puoi usare un file audio del telefono al posto della musica generata, " +
+                        "per un livello a tua scelta. Il file resta dove sta: l'app lo legge, " +
+                        "non lo copia al proprio interno.",
+                    color = DungeonColors.Stone,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    settings.customTrackName?.let { "In uso: $it" } ?: "Nessun brano scelto",
+                    color = if (settings.customTrackName != null) DungeonColors.Poison else DungeonColors.Stone,
+                    fontSize = 12.sp,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { picker.launch(arrayOf("audio/*")) }) { Text("Scegli un file") }
+                    if (settings.customTrackUri != null) {
+                        TextButton(onClick = onCustomTrackCleared) { Text("Rimuovi") }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text("Livello in cui suona", color = DungeonColors.Bone, fontSize = 13.sp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (level in 1..10) {
+                        FilterChip(
+                            selected = settings.customTrackDepth == level,
+                            onClick = { onCustomTrackDepthChange(level) },
+                            label = { Text("$level", fontSize = 12.sp) },
+                        )
+                    }
+                }
+
+                if (message != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(message, color = DungeonColors.Blood, fontSize = 11.sp)
+                    TextButton(onClick = onMessageShown) { Text("Ho capito") }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DungeonColors.Surface),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Column(Modifier.padding(16.dp)) {
                 Text("Cosa stai ascoltando", color = DungeonColors.Bone, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -122,10 +194,11 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Nessun brano registrato: la musica e' sintetizzata in tempo reale. " +
-                        "Scendendo, la scala passa da eoliana a frigia, poi locria, infine si " +
-                        "assesta sul tritono; entrano battito cardiaco, rintocchi di campana e " +
-                        "un letto di rumore, mentre il filtro si chiude e l'eco si allunga.",
+                    "Nessun brano registrato: la musica e' sintetizzata in tempo reale. Il primo " +
+                        "livello ha un tema d'avventura in modo misolidio, con arpeggio ritmico e " +
+                        "basso camminante. Scendendo, la scala passa a eoliana, poi frigia, poi " +
+                        "locria, infine si assesta sul tritono; entrano battito cardiaco, rintocchi " +
+                        "di campana e un letto di rumore, mentre il filtro si chiude e l'eco si allunga.",
                     color = DungeonColors.Stone,
                     fontSize = 11.sp,
                 )
