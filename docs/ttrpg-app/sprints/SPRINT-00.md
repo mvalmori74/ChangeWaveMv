@@ -88,6 +88,9 @@ feature-sliced definita, convenzioni di commit.
 
 ---
 #### S0-02 · App Android che builda e gira su device reale · **3 SP** · dip. S0-01, Q4
+> **Pronto per l'esecuzione (26/09)**: procedura completa in
+> `docs/ttrpg-app/runbooks/build-e-installazione-apk.md`. Serve il tuo PC e un
+> telefono; da qui non posso andare oltre.
 Expo dev client, `minSdk 33`, schermata unica. Nessuna funzionalità.
 
 **AC**

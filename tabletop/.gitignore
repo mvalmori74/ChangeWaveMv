@@ -9,3 +9,8 @@ tools/stt-bench/out/
 tools/stt-bench/clips/
 __pycache__/
 *.pyc
+
+# Chiave di firma: mai nel repository (runbook build-e-installazione-apk.md)
+*.keystore
+*.jks
+android/
