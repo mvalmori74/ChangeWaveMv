@@ -27,6 +27,14 @@ application {
     mainClass.set("com.changewave.dungeon.cli.TerminalGame")
 }
 
+// Esportazione della colonna sonora in WAV, per ascoltarla senza Android.
+tasks.register<JavaExec>("runMusicExport") {
+    group = "application"
+    description = "Genera file WAV della musica procedurale per le varie profondita'"
+    mainClass.set("com.changewave.dungeon.cli.MusicExport")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 tasks.test {
     useJUnitPlatform()
     testLogging { events("passed", "failed", "skipped") }

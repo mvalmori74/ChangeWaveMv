@@ -60,6 +60,7 @@ fun GameScreen(
     state: GameUiState,
     onCommand: (Command) -> Unit,
     onAbandon: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var sheet by remember { mutableStateOf<Sheet>(Sheet.None) }
 
@@ -139,6 +140,7 @@ fun GameScreen(
         Sheet.Character -> CharacterSheetDialog(
             hud = state.hud,
             onAbandon = onAbandon,
+            onOpenSettings = { sheet = Sheet.None; onOpenSettings() },
             onDismiss = { sheet = Sheet.None },
         )
     }
@@ -406,7 +408,12 @@ private fun TargetDialog(targets: List<TargetEntry>, onSelect: (TargetEntry) -> 
 }
 
 @Composable
-private fun CharacterSheetDialog(hud: HudState, onAbandon: () -> Unit, onDismiss: () -> Unit) {
+private fun CharacterSheetDialog(
+    hud: HudState,
+    onAbandon: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Chiudi") } },
@@ -416,6 +423,7 @@ private fun CharacterSheetDialog(hud: HudState, onAbandon: () -> Unit, onDismiss
         title = { Text("${hud.name}, ${hud.heroClass}") },
         text = {
             Column {
+                TextButton(onClick = onOpenSettings) { Text("Impostazioni (musica e volume)") }
                 SheetRow("Livello", hud.level.toString())
                 SheetRow("Punti ferita", "${hud.hitPoints}/${hud.maxHitPoints}")
                 SheetRow("Classe armatura", hud.armorClass.toString())

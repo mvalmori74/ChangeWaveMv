@@ -3,7 +3,10 @@ package com.changewave.dungeon.android.vm
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.changewave.dungeon.android.audio.MusicPlayer
+import com.changewave.dungeon.android.data.AudioSettings
 import com.changewave.dungeon.android.data.SaveStore
+import com.changewave.dungeon.android.data.SettingsStore
 import com.changewave.dungeon.dungeon.TileType
 import com.changewave.dungeon.game.Command
 import com.changewave.dungeon.game.GameEngine
@@ -30,6 +33,7 @@ import kotlinx.coroutines.withContext
 sealed interface AppState {
     data class Menu(val hasSave: Boolean, val loading: Boolean = false) : AppState
     data object Creation : AppState
+    data object Settings : AppState
     data class Playing(val game: GameUiState) : AppState
     data class Finished(val game: GameUiState, val victory: Boolean) : AppState
 }
@@ -113,10 +117,59 @@ data class TargetEntry(val id: Int, val label: String, val distance: Int, val hi
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = SaveStore(application)
+    private val settingsStore = SettingsStore(application)
+    private val music = MusicPlayer()
     private var engine: GameEngine? = null
 
     private val _state = MutableStateFlow<AppState>(AppState.Menu(store.hasSave()))
     val state: StateFlow<AppState> = _state.asStateFlow()
+
+    private val _audio = MutableStateFlow(settingsStore.load())
+    val audio: StateFlow<AudioSettings> = _audio.asStateFlow()
+
+    /** Schermata da cui si e' aperta la configurazione, per tornarci uscendo. */
+    private var stateBeforeSettings: AppState? = null
+
+    init {
+        applyAudioSettings()
+    }
+
+    // --- audio ----------------------------------------------------------------
+
+    fun setMusicEnabled(enabled: Boolean) {
+        updateAudio(_audio.value.copy(musicEnabled = enabled))
+    }
+
+    fun setMusicVolume(volume: Float) {
+        updateAudio(_audio.value.copy(musicVolume = volume.coerceIn(0f, 1f)))
+    }
+
+    private fun updateAudio(settings: AudioSettings) {
+        _audio.value = settings
+        settingsStore.save(settings)
+        applyAudioSettings()
+    }
+
+    private fun applyAudioSettings() {
+        val settings = _audio.value
+        music.setVolume(settings.musicVolume)
+        music.setEnabled(settings.musicEnabled)
+    }
+
+    /** Profondita' corrente, mostrata nella schermata delle impostazioni. */
+    fun currentDepth(): Int = engine?.state?.depth ?: 1
+
+    // --- navigazione ----------------------------------------------------------
+
+    fun openSettings() {
+        stateBeforeSettings = _state.value
+        _state.value = AppState.Settings
+    }
+
+    fun closeSettings() {
+        _state.value = stateBeforeSettings ?: AppState.Menu(store.hasSave())
+        stateBeforeSettings = null
+    }
 
     fun startCreation() {
         _state.value = AppState.Creation
@@ -178,11 +231,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Da chiamare in onStop: garantisce il salvataggio se l'app viene chiusa. */
-    fun onAppPaused() = persist()
+    /** Da chiamare in onStop: salva la partita e libera il dispositivo audio. */
+    fun onAppPaused() {
+        persist()
+        music.pause()
+    }
+
+    /** Da chiamare in onStart: riprende la musica se l'utente la vuole. */
+    fun onAppResumed() {
+        music.resume()
+    }
+
+    override fun onCleared() {
+        music.release()
+        super.onCleared()
+    }
 
     private fun publish(current: GameEngine, rejection: String? = null) {
         val ui = withEngine(current, rejection)
+        // La colonna sonora segue la profondita': la transizione la gestisce il
+        // sintetizzatore con una dissolvenza di alcuni secondi.
+        music.setDepth(current.state.depth)
         _state.value = when (current.state.status) {
             GameStatus.PLAYING -> AppState.Playing(ui)
             GameStatus.VICTORY -> AppState.Finished(ui, victory = true)

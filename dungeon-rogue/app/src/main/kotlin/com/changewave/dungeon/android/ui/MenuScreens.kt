@@ -44,6 +44,7 @@ fun MainMenuScreen(
     loading: Boolean,
     onContinue: () -> Unit,
     onNewGame: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -76,6 +77,13 @@ fun MainMenuScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
         ) { Text(if (hasSave) "Nuovo personaggio (abbandona la partita)" else "Nuova partita") }
+
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+        ) { Text("Impostazioni (musica e volume)") }
 
         Spacer(Modifier.height(28.dp))
         Card(

@@ -16,6 +16,7 @@ import com.changewave.dungeon.android.ui.DungeonTheme
 import com.changewave.dungeon.android.ui.GameOverScreen
 import com.changewave.dungeon.android.ui.GameScreen
 import com.changewave.dungeon.android.ui.MainMenuScreen
+import com.changewave.dungeon.android.ui.SettingsScreen
 import com.changewave.dungeon.android.vm.AppState
 import com.changewave.dungeon.android.vm.GameViewModel
 
@@ -34,6 +35,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppResumed()
+    }
+
     /** Il salvataggio avviene ad ogni turno; qui si copre la chiusura improvvisa. */
     override fun onStop() {
         super.onStop()
@@ -44,12 +50,21 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DungeonApp(viewModel: GameViewModel) {
     val state by viewModel.state.collectAsState()
+    val audio by viewModel.audio.collectAsState()
     when (val current = state) {
         is AppState.Menu -> MainMenuScreen(
             hasSave = current.hasSave,
             loading = current.loading,
             onContinue = viewModel::continueGame,
             onNewGame = viewModel::startCreation,
+            onSettings = viewModel::openSettings,
+        )
+        AppState.Settings -> SettingsScreen(
+            settings = audio,
+            currentDepth = viewModel.currentDepth(),
+            onMusicEnabledChange = viewModel::setMusicEnabled,
+            onMusicVolumeChange = viewModel::setMusicVolume,
+            onBack = viewModel::closeSettings,
         )
         AppState.Creation -> CharacterCreationScreen(
             onStart = viewModel::newGame,
@@ -59,6 +74,7 @@ private fun DungeonApp(viewModel: GameViewModel) {
             state = current.game,
             onCommand = viewModel::execute,
             onAbandon = viewModel::abandonGame,
+            onOpenSettings = viewModel::openSettings,
         )
         is AppState.Finished -> GameOverScreen(
             state = current.game,

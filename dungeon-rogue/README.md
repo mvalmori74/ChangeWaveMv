@@ -30,7 +30,7 @@ Dichiarazione onesta, prima di tutto il resto.
 
 | Componente | Stato | Verifica eseguita |
 |---|---|---|
-| `:core` — motore di regole, dungeon, IA, salvataggi | **completo e funzionante** | 77 test JUnit 5 verdi, più 60 partite complete giocate da un bot |
+| `:core` — motore di regole, dungeon, IA, salvataggi, audio | **completo e funzionante** | 92 test JUnit 5 verdi, più 60 partite complete giocate da un bot |
 | Runner testuale JVM (`:core:run`) | **completo e funzionante** | partite reali eseguite end-to-end |
 | `:app` — interfaccia Android (Jetpack Compose) | **compila e produce un APK installabile** | build automatica su GitHub Actions; **mai eseguita su un dispositivo** |
 
@@ -137,7 +137,69 @@ peso trasportato e fame.
 
 ---
 
-## 4. Come si costruisce ed esegue
+## 4. Colonna sonora procedurale
+
+Non ci sono file audio nel progetto: la musica e' **sintetizzata in tempo reale**
+da `:core` e diventa piu' macabra scendendo. Scelta dettata da tre vincoli
+concreti: nessuna licenza da gestire, APK invariato (dieci tracce registrate
+sarebbero decine di MB) e transizione *continua* con la profondita' invece di
+stacchi fra brani.
+
+Catena di segnale, tutta in `AmbientMusicEngine`:
+
+```
+bordone (4 osc. scordati) ┐
+pad melodico (6 voci)     ├─> somma ─> passa-basso ─> +eco ─> saturazione ─> volume
+campana inarmonica        │                           (linea di ritardo
+battito cardiaco          │                            con riaccoppiamento)
+letto di rumore filtrato  ┘
+```
+
+Cosa cambia scendendo (`MusicDirector`, tutto monotono nella profondita'):
+
+| Parametro | Livello 1 | Livello 10 |
+|---|---|---|
+| Scala | eoliana (minore naturale) | costruita sul tritono |
+| Fondamentale | 55,0 Hz | 41,2 Hz |
+| Intervallo del bordone | quinta giusta | tritono |
+| Battito cardiaco | assente (entra al 3°) | 74 bpm |
+| Campana a rintocchi | assente (entra al 5°) | presente |
+| Letto di rumore | 5% | 38% |
+| Riaccoppiamento dell'eco | 0,30 | 0,72 |
+| Cluster di seconde minori | 5% delle note | 60% delle note |
+| Indice di macabrita' | 0% | 100% |
+
+Il cambio di livello non e' uno stacco: i parametri migrano con una dissolvenza
+di 4 secondi, verificata da test.
+
+**Volume regolabile** dall'interfaccia: menu principale → *Impostazioni*, oppure
+in partita dalla scheda del personaggio. Interruttore di attivazione e cursore
+0-100% (con curva percettiva, non lineare), salvati in `SharedPreferences` e
+ripristinati al riavvio. A 0% il segnale e' silenzio assoluto, non un suono
+attenuato.
+
+### Ascoltarla senza Android
+
+```bash
+./gradlew :core:runMusicExport -PskipAndroid=true \
+  --args="--out ./musica --seconds 40 --depths 1,5,10 --descent"
+```
+
+Genera file WAV con lo stesso codice che gira sul telefono; `--descent` produce
+una traccia che scende dal livello 1 al 10 per sentire la transizione.
+
+### Un difetto trovato misurando, non ascoltando
+
+La prima versione metteva l'**83% dell'energia sotto gli 80 Hz**: corretta sulla
+carta (un dungeon deve suonare grave), inudibile in pratica su un altoparlante di
+telefono, che sotto i 200 Hz non riproduce nulla. L'analisi spettrale dei WAV
+generati l'ha reso evidente. Dopo la ritaratura — bordone spostato su ottava e
+quinta superiori, pad in registro 300-1500 Hz, rumore portato nei medi, battito
+alleggerito — la banda 200-2500 Hz raccoglie il 44-79% dell'energia a tutte le
+profondita', mentre il sub-basso resta come peso per chi ascolta in cuffia.
+Un test di regressione impone ora una soglia minima su quella banda.
+
+## 5. Come si costruisce ed esegue
 
 ### Motore e test (funziona ovunque, senza Android SDK)
 
@@ -174,7 +236,7 @@ devono stare sullo stesso classloader; dichiararli in moduli diversi con la DSL
 
 ---
 
-## 5. Lavorare dal PC o da Claude Code sul web
+## 6. Lavorare dal PC o da Claude Code sul web
 
 Il ramo su GitHub è l'unico punto di verità: si può lavorare indifferentemente in
 locale o dal cloud, a patto di rispettare una regola sola — **un lato alla volta
@@ -221,9 +283,9 @@ Windows e Linux ogni file toccato comparirebbe come modificato per intero.
 | **Installare e provare l'app sul telefono, leggere `logcat`** | **solo PC** (qui il container non raggiunge il telefono) |
 | Debug passo-passo dell'app in esecuzione | solo PC, con Android Studio |
 
-## 6. Verifica eseguita
+## 7. Verifica eseguita
 
-`./gradlew :core:test` — **77 test, tutti verdi**. Non solo unitari:
+`./gradlew :core:test` — **92 test, tutti verdi**. Non solo unitari:
 
 - **Proprietà del generatore** (30 livelli per esecuzione): connettività totale verificata a
   flood fill, scale sempre raggiungibili, nessun mostro/oggetto dentro un muro o sovrapposto,
@@ -233,6 +295,11 @@ Windows e Linux ogni file toccato comparirebbe come modificato per intero.
 - **Soak test**: 60 partite complete giocate da un bot, con invarianti controllate ogni 100
   turni (niente cadaveri sulla mappa, PF nei limiti, nessuna sovrapposizione).
 - **Salvataggi**: round-trip completo, e prosecuzione identica dopo il ricaricamento.
+- **Audio** (15 test): nessuna saturazione a nessuna profondità, RMS nell'intervallo
+  utile, silenzio assoluto a volume zero, indipendenza dalla dimensione del blocco
+  (nessun clic fra i buffer), nessun salto oltre soglia fra campioni consecutivi,
+  transizione di profondità graduale e soglia minima di energia nella banda
+  riprodotta dagli altoparlanti dei telefoni.
 - **Prestazioni** (JVM desktop): turno completo **0,07 ms**, generazione di un livello
   **0,1 ms**. Anche con un fattore 10 su un telefono di fascia bassa si resta due ordini di
   grandezza sotto il budget di 16 ms per frame.
@@ -260,7 +327,7 @@ profondi sono raggiungibili. La taratura fine va fatta con playtest umano (Sprin
 
 ---
 
-## 7. Pianificazione a sprint (2 settimane, sviluppatore senior)
+## 8. Pianificazione a sprint (2 settimane, sviluppatore senior)
 
 Stima in giorni-uomo di uno sviluppatore senior che parta da zero, per parametrare il lavoro.
 
@@ -293,12 +360,19 @@ Stima in giorni-uomo di uno sviluppatore senior che parta da zero, per parametra
 | Compilazione e correzione degli errori di build | 0,5 | fatto |
 | **Collaudo su dispositivo reale e correzione dei difetti di runtime** | **1,0** | **da fare** |
 
-### Sprint 3 — Giocabilità e rifinitura (~9 gg/uomo, da fare)
+### Sprint 3 — Giocabilità e rifinitura (~9 gg/uomo, di cui ~2,5 svolti)
 
-Playtest e taratura con giocatori reali; tutorial dei primi tre livelli; animazioni di
-attacco e danno; feedback aptico; effetti sonori; accessibilità (dimensione glifi,
-daltonismo, TalkBack sui comandi); schermata delle regole; classifica punteggi locale;
-gestione rotazione e tablet; test strumentati Compose; profilazione su dispositivo economico.
+| Attività | gg | Stato |
+|---|---|---|
+| Sintetizzatore procedurale e progressione musicale per profondità | 1,5 | fatto |
+| Schermata impostazioni con volume regolabile e persistenza | 0,5 | fatto |
+| Riproduzione in streaming su Android (AudioTrack) e gestione del ciclo di vita | 0,5 | fatto (da collaudare) |
+| Playtest e taratura della difficoltà con giocatori reali | 2,0 | da fare |
+| Tutorial dei primi tre livelli | 1,0 | da fare |
+| Animazioni di attacco e danno, feedback aptico | 1,0 | da fare |
+| Effetti sonori delle azioni (colpi, pozioni, trappole) | 1,0 | da fare |
+| Accessibilità: dimensione glifi, daltonismo, TalkBack | 1,0 | da fare |
+| Rotazione e tablet, test strumentati Compose, profilazione | 1,0 | da fare |
 
 ### Sprint 4 — Contenuti e pubblicazione (~9 gg/uomo, da fare)
 
@@ -307,8 +381,8 @@ con proprietà attive; due classi aggiuntive; incantesimi di 3° livello; firma 
 scheda Play Store, privacy policy, canale di test interno; telemetria anonima di
 bilanciamento (profondità di morte, cause) per chiudere il ciclo sulla difficoltà.
 
-**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~16 giorni-uomo**, di cui 9
-verificati da test automatici, 6 verificati fino alla compilazione e al
+**Totale progetto: ~35 giorni-uomo senior. Consegnato ora: ~18,5 giorni-uomo**, di cui
+10,5 verificati da test automatici, 8 verificati fino alla compilazione e al
 confezionamento dell'APK, e il collaudo sul dispositivo ancora da fare.
 
 ### Rischi residui (in ordine di probabilità)
@@ -321,10 +395,13 @@ confezionamento dell'APK, e il collaudo sul dispositivo ancora da fare.
 3. **Difficoltà ancora sbilanciata sui livelli 5-10** — probabilità media: il bot non arriva
    abbastanza in fondo da misurarla; serve playtest umano.
 4. **Prestazioni su dispositivi molto vecchi** — probabilità bassa: margine attuale ampio.
+5. **Resa della musica sull'altoparlante reale** — probabilità media: il bilanciamento
+   spettrale è verificato numericamente, ma il timbro finale dipende dal trasduttore;
+   potrebbe servire un ritocco dopo il primo ascolto su telefono.
 
 ---
 
-## 8. Licenza dei contenuti
+## 9. Licenza dei contenuti
 
 Le meccaniche e le statistiche delle creature derivano dal **System Reference Document 5.1**
 di Wizards of the Coast LLC, disponibile sotto licenza
