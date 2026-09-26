@@ -43,9 +43,19 @@ Dal luglio 2026 il servizio è gratuito senza limiti di banda né di numero di t
 **Ma richiede un dominio proprio**, con i nameserver gestiti da Cloudflare: il
 servizio non fornisce sottodomini.
 
-**Costo reale: ~10 €/anno di dominio**, circa 0,85 €/mese. È un costo ricorrente, e
-§13-D3 diceva di non volerne. La deviazione va decisa dall'utente, non data per
-scontata — è il motivo per cui questa sezione esiste.
+**Costo reale: ~10 €/anno di dominio** in generale — ma **nel nostro caso zero**:
+l'utente possiede già un secondo dominio con il solo redirect, senza posta, che è il
+candidato ideale. §13-D3 resta rispettato alla lettera, nessun costo ricorrente nuovo.
+*(Risolto il 26/09/2026; la versione precedente di questa sezione segnalava la
+deviazione come aperta.)*
+
+**Perché il secondo dominio e non quello della posta**: sul piano gratuito Cloudflare
+diventa autoritativo per l'intera zona DNS, quindi anche MX, SPF, DKIM e DMARC
+passerebbero da lì. La configurazione parziale, che lascerebbe il DNS all'attuale
+gestore, è riservata al piano Business a pagamento. Spostare il dominio della posta è
+fattibile con attenzione, ma è un rischio che non serve prendere quando esiste un
+dominio senza nulla da perdere. Il redirect che si interrompe si ricrea con una regola
+gratuita.
 
 ### Tailscale — valutato
 

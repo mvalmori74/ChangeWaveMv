@@ -290,7 +290,8 @@ Mandami questi dati e chiudo tre story dello Sprint 0.
 Solo dopo che il caso A funziona. Due passi:
 
 > **Quale servizio e quanto costa**: è Cloudflare Tunnel, gratuito, ma richiede un
-> dominio tuo (~10 €/anno) con i nameserver su Cloudflare. Alternative senza dominio
+> dominio con i nameserver su Cloudflare. **Nel nostro caso costa zero**: si usa il
+> secondo dominio, quello con il solo redirect — vedi §8-ter. Alternative senza dominio
 > in ADR-003, con i loro compromessi. **Prima di comprare il dominio** puoi provare il
 > meccanismo gratis con un tunnel estemporaneo:
 > ```powershell
@@ -321,6 +322,39 @@ Questa è la build da distribuire ai giocatori. Provala **prima** dalla rete mob
 tuo telefono, con il Wi-Fi spento: è l'unico modo di verificare davvero che il tunnel
 funzioni, perché restando sul Wi-Fi di casa non sapresti se stai passando da lì o
 dalla rete locale.
+
+## 8-ter. Portare il secondo dominio su Cloudflare
+
+Si usa il **secondo dominio**, quello con il solo redirect, e non quello della posta.
+Motivo: Cloudflare sul piano gratuito diventa autoritativo per **tutta** la zona DNS —
+la configurazione parziale, che lascerebbe il DNS ad Aruba, è riservata al piano
+Business a pagamento. Spostare il dominio della posta significherebbe far passare da
+Cloudflare anche MX, SPF, DKIM e DMARC: fattibile, ma è un rischio che non serve
+prendere quando esiste un dominio senza nulla da perdere.
+
+**Costo: zero.** Il dominio c'è già, il tunnel è gratuito, il redirect si ricrea con una
+regola gratuita (il piano gratuito ne concede dieci per dominio). §13-D3 resta
+rispettato.
+
+L'unica cosa che si interrompe è il redirect gestito da Aruba, che si appoggia al loro
+DNS. Si rimette in piedi al punto 4.
+
+1. **Annota dove punta il redirect adesso**, prima di toccare qualunque cosa.
+2. Aggiungi il dominio a Cloudflare, piano **Free**. Al termine ti dà due nameserver.
+3. Nel pannello Aruba, sostituisci i nameserver del dominio con quelli di Cloudflare.
+   L'attivazione richiede da qualche minuto a qualche ora.
+4. Su Cloudflare, *Rules → Redirect Rules*: ricrea il redirect verso la destinazione
+   del punto 1. Se quel redirect non ti serviva davvero, questo è il momento di
+   accorgertene.
+5. Crea il tunnel (*Zero Trust → Networks → Tunnels*), associagli un hostname —
+   per esempio `tavolo.tuosecondodominio.it` — che punta a `http://api:8080`,
+   il nome del servizio dentro il compose.
+6. Copia il token nel file `.env` accanto al compose, alla voce `TOKEN_TUNNEL`.
+7. Riparti dal punto **8-bis**.
+
+> **Verifica amministrativa**: controlla se Aruba ti fatturava il servizio di redirect
+> come voce separata. A nameserver spostati non farebbe più nulla, e continuare a
+> pagarlo sarebbe il tipo di costo che si scopre due anni dopo.
 
 ## 9. Se qualcosa non va
 
