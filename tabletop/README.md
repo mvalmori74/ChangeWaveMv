@@ -22,8 +22,12 @@ Non c'è ancora: interfaccia della chat, dadi, media, allegati.
 
 ```bash
 pnpm install
-pnpm check          # lint + typecheck + test
+pnpm check          # lint + typecheck + test + build
 ```
+
+Gli stessi passi girano in CI (`.github/workflows/verifica.yml`) su ogni push che
+tocca `tabletop/`, con un Postgres reale e un passo finale che **avvia il server
+costruito**: compilare non basta, deve partire.
 
 I test di integrazione sul database si saltano da soli se non c'è un Postgres.
 Per eseguirli:

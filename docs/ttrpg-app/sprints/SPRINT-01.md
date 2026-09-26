@@ -66,6 +66,28 @@ Due scelte di risposta che meritano una riga:
 token ancora valido continuerebbe a leggere la diretta finché non scade. C'è un test
 che lo verifica.
 
+### Integrazione continua
+
+`.github/workflows/verifica.yml`, sul solo progetto `tabletop/`: lint, tipi, test con
+**Postgres 17 reale** come servizio, build, e un ultimo passo che **avvia l'artefatto
+costruito** e interroga `/salute` e `/stato`.
+
+Un secondo lavoro esegue i test **senza** database, per sorvegliare la promessa che
+chi lavora al progetto possa provarli senza installare Postgres. Senza questo
+controllo, il giorno che qualcuno dimentica una guardia se ne accorgerebbe solo un
+nuovo arrivato, e nel modo peggiore.
+
+**Come l'ho collaudata**, dato che GitHub Actions gira solo su GitHub: clone pulito del
+repository in una cartella vuota, e poi gli **stessi comandi nello stesso ordine**.
+Tutti e sette superati. Quello che resta non verificato è la parte specifica di
+Actions — versioni delle azioni (controllate alla fonte: `checkout@v7`,
+`setup-node@v7`, `pnpm/action-setup@v6`), blocco `services`, immagine del runner. Se
+qualcosa lì è sbagliato, la prima esecuzione lo dirà subito e con chiarezza.
+
+Una semplificazione nata dal collaudo: il passo di avvio **riusa il database dei
+test** invece di crearne uno, perché ogni file di test lavora nel proprio schema e
+quello `public` resta vuoto. Un comando in meno da dare per presente sul runner.
+
 ## Reperti
 
 ### R5 — I test dai sorgenti non vedono i bug di confezionamento
@@ -117,4 +139,4 @@ nel file.
 - [ ] Persistenza locale sul telefono (SQLite) e coda outbox collegata alla rete
 - [ ] Schermata di chat: elenco, invio, stati di consegna, indicatore di riconnessione
 - [ ] Notifiche push di base
-- [ ] CI (arretrata dallo Sprint 0)
+- [x] ~~CI~~ — arretrata dallo Sprint 0, chiusa il 26/09

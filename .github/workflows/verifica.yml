@@ -43,13 +43,13 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -81,11 +81,13 @@ jobs:
       - name: L'artefatto costruito parte davvero
         # Ultimo gradino: non basta che compili, deve avviarsi e rispondere.
         env:
-          DATABASE_URL: postgres://postgres:prova@localhost:5432/tavolo_avvio
+          # Riusa il database dei test invece di crearne uno: i file di test
+          # lavorano ciascuno nel proprio schema, quindi lo schema 'public' e'
+          # rimasto vuoto. Un comando in meno da dare per presente sul runner.
+          DATABASE_URL: postgres://postgres:prova@localhost:5432/tavolo
           PORTA: 8099
           PERCORSO_DATI: /tmp
         run: |
-          PGPASSWORD=prova createdb -h localhost -U postgres tavolo_avvio
           node apps/server/dist/index.js & SERVER=$!
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8099/salute > /dev/null && break
@@ -100,11 +102,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
