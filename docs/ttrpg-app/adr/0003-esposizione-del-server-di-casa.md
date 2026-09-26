@@ -31,6 +31,53 @@ drasticamente la superficie di attacco verso la rete di casa.
 Il DNS dinamico resta come indirizzo stabile e piano di riserva, non come meccanismo
 principale.
 
+## Quale servizio di tunnel — e cosa costa davvero
+
+*Aggiunto il 26/09/2026. La stesura originale sceglieva "un tunnel in uscita" senza
+dire quale, e il compose intanto usava Cloudflare: una decisione presa di fatto e mai
+scritta. Peggio, nascondeva un requisito con un costo.*
+
+### Cloudflare Tunnel — scelto
+
+Dal luglio 2026 il servizio è gratuito senza limiti di banda né di numero di tunnel.
+**Ma richiede un dominio proprio**, con i nameserver gestiti da Cloudflare: il
+servizio non fornisce sottodomini.
+
+**Costo reale: ~10 €/anno di dominio**, circa 0,85 €/mese. È un costo ricorrente, e
+§13-D3 diceva di non volerne. La deviazione va decisa dall'utente, non data per
+scontata — è il motivo per cui questa sezione esiste.
+
+### Tailscale — valutato
+
+Gratuito fino a **6 utenti** con dispositivi illimitati (raddoppiato da 3 ad aprile
+2026). Il tavolo di riferimento è esattamente 6: ci sta, **al limite esatto**. Il
+settimo giocatore farebbe saltare il piano.
+
+### ZeroTier — valutato
+
+Gratuito fino a **10 dispositivi** per rete (ridotto da 25 nel 2024). Sei telefoni più
+il server fanno sette: ci sta con margine.
+
+### Perché Cloudflare nonostante il costo
+
+Tailscale e ZeroTier sono gratuiti ma **spostano il costo sui giocatori**: ognuno deve
+installare una rete privata virtuale, crearsi un account e tenerla attiva. Per un'app
+che si usa due sere a settimana, quell'attrito è ciò che fa smettere le persone. Il
+proprietario del progetto lo sopporterebbe; l'amico che voleva solo tirare un dado no.
+
+Dieci euro l'anno sono il costo più basso di tutto il progetto — meno di quanto
+consuma il PC acceso in un mese (§4-bis).
+
+### Prima di spendere: i quick tunnel
+
+Cloudflare offre anche tunnel estemporanei senza account né dominio, con un indirizzo
+casuale generato al volo. **Inutilizzabili a regime**, perché l'indirizzo cambia a
+ogni riavvio mentre l'APK lo porta compilato dentro.
+
+Servono però a una cosa precisa: **verificare che il meccanismo funzioni su questa
+linea prima di comprare il dominio**. Se il tunnel non passasse, si è risparmiato il
+dominio; se passa, si compra sapendo.
+
 ## Conseguenze
 
 - Dipendenza da un servizio di terzi, seppure nel suo piano gratuito: è un punto di

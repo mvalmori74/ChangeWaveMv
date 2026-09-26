@@ -289,6 +289,18 @@ Mandami questi dati e chiudo tre story dello Sprint 0.
 
 Solo dopo che il caso A funziona. Due passi:
 
+> **Quale servizio e quanto costa**: è Cloudflare Tunnel, gratuito, ma richiede un
+> dominio tuo (~10 €/anno) con i nameserver su Cloudflare. Alternative senza dominio
+> in ADR-003, con i loro compromessi. **Prima di comprare il dominio** puoi provare il
+> meccanismo gratis con un tunnel estemporaneo:
+> ```powershell
+> docker run --rm --network host cloudflare/cloudflared tunnel --url http://localhost:8080
+> ```
+> Stampa un indirizzo `https://...trycloudflare.com` valido finché il comando resta
+> aperto. Provalo dal telefono **con il Wi-Fi spento**: se risponde, la tua linea
+> regge il tunnel e puoi comprare il dominio sapendo. L'indirizzo cambia a ogni
+> avvio, quindi non serve per l'app vera.
+
 1. Sul PC, con il token del servizio di tunnel in `.env`:
    ```powershell
    cd tabletop\infra
