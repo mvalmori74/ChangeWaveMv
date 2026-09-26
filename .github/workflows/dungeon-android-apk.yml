@@ -1,0 +1,101 @@
+name: Dungeon APK
+
+on:
+  push:
+    branches:
+      - 'claude/dungeon-**'
+    paths:
+      - 'dungeon-rogue/**'
+      - '.github/workflows/dungeon-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # L'immagine ubuntu-latest include gia' l'Android SDK: serve solo
+      # assicurarsi che licenze, piattaforma e build-tools richiesti ci siano.
+      - name: Prepara i componenti dell'Android SDK
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      - name: Test del motore di gioco
+        working-directory: dungeon-rogue
+        run: ./gradlew :core:test --no-daemon
+
+      - name: Build APK di debug
+        working-directory: dungeon-rogue
+        run: ./gradlew :app:assembleDebug --no-daemon -PskipAndroid=false
+
+      # Nome fisso: il link di download della release resta sempre lo stesso e la
+      # pagina non accumula un file per ogni build. Il numero di build finisce
+      # nelle note della release.
+      - name: Prepara l'APK da pubblicare
+        id: apk
+        working-directory: dungeon-rogue
+        run: |
+          set -euo pipefail
+          src="$(find app/build/outputs/apk/debug -name '*.apk' | head -1)"
+          dest="dungeon-d20-debug.apk"
+          cp "$src" "$dest"
+          echo "path=dungeon-rogue/$dest" >> "$GITHUB_OUTPUT"
+          echo "name=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Pubblica l'APK come artifact della build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dungeon-d20-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+      # La release rende l'APK scaricabile con un link diretto, senza dover
+      # entrare nella pagina della singola esecuzione della action.
+      - name: Aggiorna la release scaricabile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          TAG="dungeon-apk-latest"
+          NOTES="APK di debug numero ${GITHUB_RUN_NUMBER}, generato automaticamente dal commit ${GITHUB_SHA}.
+          Installazione: scarica il file sul telefono e consenti l'installazione da origini sconosciute.
+          Si tratta di una build di debug firmata con la chiave di debug di Android: non pubblicabile sul Play Store."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            gh release edit "$TAG" --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" "$APK" \
+              --title "Dungeon d20 - APK di debug" \
+              --notes "$NOTES" \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
+          # Rimuove gli APK delle build precedenti che usavano un nome numerato,
+          # cosi' sulla pagina resta un solo file da scaricare. Quando non c'e'
+          # nulla da rimuovere grep esce con codice 1: va neutralizzato, altrimenti
+          # con `set -o pipefail` il passo fallisce a release gia' aggiornata.
+          stale="$(gh release view "$TAG" --json assets --jq '.assets[].name' | grep -v '^dungeon-d20-debug\.apk$' || true)"
+          if [ -n "$stale" ]; then
+            echo "$stale" | while read -r name; do
+              echo "Rimuovo l'asset obsoleto: $name"
+              gh release delete-asset "$TAG" "$name" --yes
+            done
+          fi

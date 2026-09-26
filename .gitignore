@@ -1,5 +1,27 @@
+# Node (API libreria)
 node_modules/
 .env
 *.log
 .DS_Store
 data/*.json
+
+# Gradle / JVM (progetto dungeon-rogue)
+.gradle/
+build/
+.kotlin/
+
+# Configurazione locale della macchina: contiene il percorso dell'Android SDK,
+# che e' diverso su ogni PC. Non va condiviso.
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Artefatti di build Android
+*.apk
+*.aab
+captures/
