@@ -174,7 +174,54 @@ devono stare sullo stesso classloader; dichiararli in moduli diversi con la DSL
 
 ---
 
-## 5. Verifica eseguita
+## 5. Lavorare dal PC o da Claude Code sul web
+
+Il ramo su GitHub è l'unico punto di verità: si può lavorare indifferentemente in
+locale o dal cloud, a patto di rispettare una regola sola — **un lato alla volta
+sullo stesso ramo**. L'ambiente cloud è effimero: ciò che non è committato e
+pushato non esiste.
+
+### Prima volta sul PC
+
+```bash
+git clone https://github.com/mvalmori74/ChangeWaveMv.git
+cd ChangeWaveMv
+git checkout claude/dungeon-rogue-dnd-android-09lksd
+cd dungeon-rogue
+./gradlew :core:test -PskipAndroid=true     # verifica che tutto giri
+```
+
+Per l'app Android apri in Android Studio la cartella `dungeon-rogue` (non la
+radice del repository): JDK 17 e Android SDK vengono gestiti dall'IDE. Per il solo
+motore basta un JDK 17, senza SDK: il modulo `:app` viene escluso da solo.
+
+### Ogni volta che si cambia lato
+
+| Quando | Sul PC | Qui (sessione cloud) |
+|---|---|---|
+| Prima di iniziare | `git pull --rebase origin <ramo>` | dimmi "ho lavorato dal PC": faccio `git pull` prima di toccare qualsiasi cosa |
+| Prima di smettere | `git commit` + `git push` | committo e pusho io a fine lavoro |
+
+Se si lavora davvero in parallelo, meglio due rami separati e un merge, invece di
+alternarsi sullo stesso: evita rebase e push forzati.
+
+### Cosa non entra in git (già escluso)
+
+`local.properties` (percorso dell'Android SDK, diverso su ogni macchina),
+`.gradle/`, `build/`, `.idea/`, `*.iml`, `*.apk`. Il file `.gitattributes`
+normalizza i fine-riga a LF, con l'eccezione dei `.bat`: senza di esso, alternando
+Windows e Linux ogni file toccato comparirebbe come modificato per intero.
+
+### Cosa conviene fare dove
+
+| Attività | Dove |
+|---|---|
+| Modifiche al motore, test, bilanciamento | indifferente |
+| Build e firma dell'APK | cloud (pipeline) o PC con SDK |
+| **Installare e provare l'app sul telefono, leggere `logcat`** | **solo PC** (qui il container non raggiunge il telefono) |
+| Debug passo-passo dell'app in esecuzione | solo PC, con Android Studio |
+
+## 6. Verifica eseguita
 
 `./gradlew :core:test` — **77 test, tutti verdi**. Non solo unitari:
 
@@ -213,7 +260,7 @@ profondi sono raggiungibili. La taratura fine va fatta con playtest umano (Sprin
 
 ---
 
-## 6. Pianificazione a sprint (2 settimane, sviluppatore senior)
+## 7. Pianificazione a sprint (2 settimane, sviluppatore senior)
 
 Stima in giorni-uomo di uno sviluppatore senior che parta da zero, per parametrare il lavoro.
 
@@ -277,7 +324,7 @@ confezionamento dell'APK, e il collaudo sul dispositivo ancora da fare.
 
 ---
 
-## 7. Licenza dei contenuti
+## 8. Licenza dei contenuti
 
 Le meccaniche e le statistiche delle creature derivano dal **System Reference Document 5.1**
 di Wizards of the Coast LLC, disponibile sotto licenza

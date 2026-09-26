@@ -1,0 +1,22 @@
+# Normalizzazione dei fine-riga: il repository conserva sempre LF, la copia di
+# lavoro usa la convenzione del sistema operativo. Senza questo, alternando PC
+# Windows e ambienti Linux ogni file toccato risulterebbe modificato per intero.
+* text=auto eol=lf
+
+# Gli script batch di Windows devono avere CRLF, altrimenti cmd.exe non li esegue.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Lo script del wrapper Gradle deve restare LF anche su Windows (lo usa Git Bash/WSL).
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Binari: mai convertiti, mai mostrati come diff testuale.
+*.jar binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.jks binary
+*.png binary
+*.webp binary
+*.ttf binary
